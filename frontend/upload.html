@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Upload Leaf Image – AgriCrop</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="css/main.css" rel="stylesheet"/><link href="css/dark-mode.css" rel="stylesheet"/><link href="css/animations.css" rel="stylesheet"/>
+</head>
+<body>
+<!-- Navbar -->
+<nav class="ag-navbar"><div class="d-flex align-items-center gap-3 w-100" style="padding:0 1.5rem;">
+  <button class="d-lg-none btn-ag-icon" id="sidebar-toggle">☰</button>
+  <a href="/" class="brand">🌱 AgriCrop</a>
+  <div class="ms-auto d-flex gap-2 align-items-center">
+    <button id="theme-toggle"><span class="toggle-icon sun-icon">☀️</span><span class="toggle-icon moon-icon">🌙</span></button>
+    <a href="notifications.html" class="nav-icon-btn position-relative">🔔<span id="notif-badge" class="badge-notif hidden">0</span></a>
+    <a href="dashboard.html" class="btn-ag-secondary" style="font-size:0.82rem;padding:0.45rem 1rem;">← Dashboard</a>
+  </div>
+</div></nav>
+
+<!-- Sidebar -->
+<aside class="ag-sidebar" id="sidebar">
+  <a href="dashboard.html" class="sidebar-link"><span class="link-icon">🏠</span> Dashboard</a>
+  <a href="upload.html" class="sidebar-link active"><span class="link-icon">🌿</span> Upload Leaf</a>
+  <a href="soil-prediction.html" class="sidebar-link"><span class="link-icon">💧</span> Soil Prediction</a>
+  <a href="map.html" class="sidebar-link"><span class="link-icon">🗺️</span> Disease Map</a>
+  <a href="history.html" class="sidebar-link"><span class="link-icon">📋</span> History</a>
+  <a href="notifications.html" class="sidebar-link"><span class="link-icon">🔔</span> Notifications</a>
+  <a href="profile.html" class="sidebar-link"><span class="link-icon">👤</span> Profile</a>
+</aside>
+
+<main class="ag-content-area ag-page">
+  <div class="section-header mb-4">
+    <div>
+      <h2 class="section-title">🌿 Leaf Disease Detection</h2>
+      <p class="section-subtitle">Upload a clear photo of a crop leaf to detect diseases using MobileNetV2 AI</p>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Upload Panel -->
+    <div class="col-lg-7">
+      <form id="upload-form">
+        <!-- Drop Zone -->
+        <div class="ag-card mb-4">
+          <div class="upload-zone" id="upload-drop-zone">
+            <input type="file" id="leaf-file-input" accept="image/*" style="display:none"/>
+            <div class="upload-icon">🌿</div>
+            <h5 style="color:var(--text-primary);margin-top:1rem;">Drag & Drop Leaf Image</h5>
+            <p class="text-muted" style="font-size:0.88rem;">or click to browse files</p>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.5rem;">JPG, PNG, WEBP, BMP · Max 10MB</div>
+          </div>
+          <div id="file-info" class="hidden mt-3 text-center" style="font-size:0.82rem;color:var(--text-muted);"></div>
+
+          <!-- Image Preview -->
+          <div id="preview-wrapper" class="hidden mt-3 text-center">
+            <img id="image-preview" alt="Leaf preview" style="max-height:280px;max-width:100%;border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-md);"/>
+            <div class="d-flex justify-content-center gap-2 mt-2">
+              <button type="button" id="reset-btn" class="btn-ag-secondary" style="font-size:0.82rem;padding:0.4rem 1rem;">🔄 Change Image</button>
+            </div>
+          </div>
+
+          <!-- Progress -->
+          <div id="upload-progress" class="hidden mt-3">
+            <div class="ag-progress">
+              <div class="ag-progress-bar green progress-fill-animate" style="width:0%;transition:width 1s ease;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metadata Form -->
+        <div class="ag-card mb-4">
+          <h6 style="color:var(--text-primary);font-weight:700;margin-bottom:1rem;">📋 Additional Details (Optional)</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="ag-form-group">
+                <label class="ag-label">Select Farm</label>
+                <select id="farm-select" class="ag-input ag-select">
+                  <option value="">No specific farm</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="ag-form-group">
+                <label class="ag-label">Crop Type</label>
+                <select id="crop-type-input" class="ag-input ag-select">
+                  <option value="">Auto-detect from image</option>
+                  <option>Tomato</option><option>Potato</option><option>Corn (Maize)</option>
+                  <option>Apple</option><option>Grape</option><option>Strawberry</option>
+                  <option>Pepper</option><option>Peach</option><option>Cherry</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="ag-form-group">
+                <label class="ag-label">Latitude</label>
+                <div class="input-wrapper">
+                  <span class="input-icon">📍</span>
+                  <input type="number" id="lat-input" class="ag-input" placeholder="e.g. 18.5204" step="0.000001"/>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="ag-form-group">
+                <label class="ag-label">Longitude</label>
+                <div class="input-wrapper">
+                  <span class="input-icon">📍</span>
+                  <input type="number" id="lon-input" class="ag-input" placeholder="e.g. 73.8567" step="0.000001"/>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button type="button" id="get-location-btn" class="btn-ag-secondary mt-1" style="font-size:0.82rem;">
+            📍 Get Current Location
+          </button>
+          <div class="ag-form-group mt-3">
+            <label class="ag-label">Notes</label>
+            <textarea id="notes-input" class="ag-input" rows="2" placeholder="Any observations about the crop..."></textarea>
+          </div>
+        </div>
+
+        <button type="submit" id="upload-btn" class="btn-ag-primary w-100" disabled style="padding:0.9rem;font-size:1rem;justify-content:center;">
+          🔬 Analyze Crop
+        </button>
+      </form>
+    </div>
+
+    <!-- Tips Panel -->
+    <div class="col-lg-5">
+      <div class="ag-card mb-3">
+        <h6 style="color:var(--text-primary);font-weight:700;margin-bottom:1rem;">💡 Tips for Best Results</h6>
+        <div class="d-flex flex-column gap-3">
+          <div class="d-flex gap-3 align-items-start">
+            <span style="font-size:1.3rem;flex-shrink:0;">📷</span>
+            <div><div style="font-weight:600;font-size:0.88rem;">Good Lighting</div><div class="text-muted" style="font-size:0.8rem;">Take photos in natural daylight. Avoid shadows on the leaf.</div></div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <span style="font-size:1.3rem;flex-shrink:0;">🎯</span>
+            <div><div style="font-weight:600;font-size:0.88rem;">Focus on One Leaf</div><div class="text-muted" style="font-size:0.8rem;">Center one leaf in frame. Avoid cluttered backgrounds.</div></div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <span style="font-size:1.3rem;flex-shrink:0;">🔍</span>
+            <div><div style="font-weight:600;font-size:0.88rem;">Capture Symptoms</div><div class="text-muted" style="font-size:0.8rem;">Include visible spots, discoloration, or lesions for accurate detection.</div></div>
+          </div>
+          <div class="d-flex gap-3 align-items-start">
+            <span style="font-size:1.3rem;flex-shrink:0;">📐</span>
+            <div><div style="font-weight:600;font-size:0.88rem;">Min 224×224 px</div><div class="text-muted" style="font-size:0.8rem;">Higher resolution images give better prediction accuracy.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Supported Diseases -->
+      <div class="ag-card">
+        <h6 style="color:var(--text-primary);font-weight:700;margin-bottom:1rem;">🦠 Detectable Diseases</h6>
+        <div class="row g-2" style="font-size:0.78rem;">
+          <div class="col-6"><div class="tech-badge">🍅 Tomato Blight</div></div>
+          <div class="col-6"><div class="tech-badge">🥔 Potato Blight</div></div>
+          <div class="col-6"><div class="tech-badge">🌽 Corn Rust</div></div>
+          <div class="col-6"><div class="tech-badge">🍎 Apple Scab</div></div>
+          <div class="col-6"><div class="tech-badge">🍇 Grape Rot</div></div>
+          <div class="col-6"><div class="tech-badge">+ 33 More</div></div>
+        </div>
+        <p class="text-muted mt-2 mb-0" style="font-size:0.78rem;">Trained on PlantVillage dataset with 38 disease classes</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="ag-toast-container" class="ag-toast-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="js/utils.js"></script><script src="js/firebase-config.js"></script><script src="js/api.js"></script>
+<script src="js/auth.js"></script><script src="js/upload.js"></script>
+<script>
+  const dropZone = document.getElementById("upload-drop-zone");
+  // Make entire drop zone trigger file input when NOT clicking the input itself
+  dropZone.addEventListener("click", (e) => {
+    if (e.target !== dropZone.querySelector("input")) {
+      document.getElementById("leaf-file-input").click();
+    }
+  });
+  document.getElementById("sidebar-toggle")?.addEventListener("click", () => {
+    document.getElementById("sidebar")?.classList.toggle("open");
+  });
+</script>
+</body>
+</html>

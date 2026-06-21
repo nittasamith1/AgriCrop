@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Disease Result – AgriCrop</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="css/main.css" rel="stylesheet"/><link href="css/dark-mode.css" rel="stylesheet"/><link href="css/animations.css" rel="stylesheet"/>
+  <style>
+    .confidence-ring-svg circle { transition: stroke-dashoffset 1.5s cubic-bezier(0.4,0,0.2,1); }
+    .treatment-step { display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem 0; border-bottom:1px solid var(--border); }
+    .treatment-step:last-child { border-bottom:none; }
+    .treatment-num { width:28px;height:28px;border-radius:50%;background:var(--primary-glow);color:var(--primary-light);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;flex-shrink:0;}
+    .top-pred-bar { height:8px;border-radius:4px;background:var(--bg-input);overflow:hidden;flex:1; }
+    .top-pred-fill { height:100%;border-radius:4px;background:var(--grad-green);transition:width 1s ease; }
+  </style>
+</head>
+<body>
+<nav class="ag-navbar"><div class="d-flex align-items-center gap-3 w-100" style="padding:0 1.5rem;">
+  <a href="/" class="brand">🌱 AgriCrop</a>
+  <div class="ms-auto d-flex gap-2 align-items-center">
+    <button id="theme-toggle"><span class="toggle-icon sun-icon">☀️</span><span class="toggle-icon moon-icon">🌙</span></button>
+    <a href="upload.html" class="btn-ag-secondary" style="font-size:0.82rem;padding:0.45rem 1rem;">← New Scan</a>
+    <a href="dashboard.html" class="btn-ag-primary" style="font-size:0.82rem;padding:0.45rem 1rem;">Dashboard</a>
+  </div>
+</div></nav>
+
+<main class="ag-page" style="padding:2rem 1.5rem;">
+  <div id="loading-state" class="text-center py-5">
+    <div class="ag-spinner ag-spinner-lg mx-auto mb-3"></div>
+    <p class="text-muted">Loading prediction result...</p>
+  </div>
+
+  <div id="result-content" class="hidden ag-container">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        <h2 class="section-title" id="result-title">Disease Analysis Result</h2>
+        <p class="section-subtitle">Powered by MobileNetV2 Transfer Learning</p>
+      </div>
+      <div class="d-flex gap-2">
+        <button onclick="window.print()" class="btn-ag-secondary" style="font-size:0.82rem;">🖨️ Print</button>
+        <button id="generate-report-btn" class="btn-ag-primary" style="font-size:0.82rem;">📄 Download Report</button>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <!-- Left: Image + Confidence -->
+      <div class="col-lg-4">
+        <div class="ag-card text-center mb-3">
+          <img id="result-image" src="" alt="Leaf" style="width:100%;max-height:280px;object-fit:cover;border-radius:10px;margin-bottom:1rem;" onerror="this.src='assets/images/leaf-placeholder.png'"/>
+          <div id="result-severity-badge"></div>
+        </div>
+        <!-- Confidence Ring -->
+        <div class="ag-card text-center">
+          <div class="chart-title mb-3">Confidence Score</div>
+          <div class="confidence-ring" id="confidence-ring" style="margin:0 auto;">
+            <svg width="130" height="130" viewBox="0 0 130 130">
+              <circle cx="65" cy="65" r="55" fill="none" stroke="var(--bg-input)" stroke-width="12"/>
+              <circle id="conf-circle" cx="65" cy="65" r="55" fill="none" stroke="#16a34a" stroke-width="12" stroke-linecap="round"
+                stroke-dasharray="345.6" stroke-dashoffset="345.6"/>
+            </svg>
+            <div class="cr-value" id="conf-value">0%</div>
+            <div class="cr-label">Accuracy</div>
+          </div>
+          <div class="mt-3" style="font-size:0.8rem;color:var(--text-muted);" id="model-version-label">MobileNetV2-v1</div>
+        </div>
+      </div>
+
+      <!-- Right: Details -->
+      <div class="col-lg-8">
+        <!-- Disease Info -->
+        <div class="ag-card mb-3">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="stat-label">Disease Detected</div>
+              <div class="fw-700" id="disease-name" style="font-size:1.2rem;color:var(--text-primary);margin-top:4px;">—</div>
+            </div>
+            <div class="col-md-3">
+              <div class="stat-label">Crop Type</div>
+              <div class="fw-600" id="crop-type" style="color:var(--text-primary);margin-top:4px;">—</div>
+            </div>
+            <div class="col-md-3">
+              <div class="stat-label">Affected Area</div>
+              <div class="fw-600" id="affected-area" style="color:var(--text-primary);margin-top:4px;">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Predictions -->
+        <div class="ag-card mb-3">
+          <div class="chart-title mb-3">📊 Top Predictions</div>
+          <div id="top-predictions"></div>
+        </div>
+
+        <!-- Treatments -->
+        <div class="ag-card mb-3">
+          <div class="chart-title mb-3">💊 Treatment Plan</div>
+          <div id="treatment-list"></div>
+        </div>
+
+        <!-- Prevention -->
+        <div class="ag-card mb-3">
+          <div class="chart-title mb-3">🛡️ Prevention Tips</div>
+          <div id="prevention-list"></div>
+        </div>
+
+        <!-- Pesticides -->
+        <div class="ag-card">
+          <div class="chart-title mb-2">🧪 Recommended Pesticides</div>
+          <div id="pesticide-list" class="d-flex flex-wrap gap-2"></div>
+          <div class="mt-2">
+            <div class="chart-title mb-2" style="font-size:0.88rem;">🌿 Organic Alternatives</div>
+            <div id="organic-list" class="d-flex flex-wrap gap-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Next Steps -->
+    <div class="row g-3 mt-2">
+      <div class="col-md-4">
+        <a href="upload.html" class="ag-card d-flex align-items-center gap-3 text-decoration-none hover-lift">
+          <span style="font-size:1.8rem;">🔬</span>
+          <div><div class="fw-600" style="color:var(--text-primary);">Scan Another Leaf</div><small class="text-muted">Upload a new image</small></div>
+        </a>
+      </div>
+      <div class="col-md-4">
+        <a href="map.html" class="ag-card d-flex align-items-center gap-3 text-decoration-none hover-lift">
+          <span style="font-size:1.8rem;">🗺️</span>
+          <div><div class="fw-600" style="color:var(--text-primary);">View Disease Map</div><small class="text-muted">See nearby hotspots</small></div>
+        </a>
+      </div>
+      <div class="col-md-4">
+        <a href="history.html" class="ag-card d-flex align-items-center gap-3 text-decoration-none hover-lift">
+          <span style="font-size:1.8rem;">📋</span>
+          <div><div class="fw-600" style="color:var(--text-primary);">View All History</div><small class="text-muted">All your predictions</small></div>
+        </a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="ag-toast-container" class="ag-toast-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="js/utils.js"></script><script src="js/firebase-config.js"></script><script src="js/api.js"></script><script src="js/auth.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  Auth.requireAuth();
+
+  // Try sessionStorage first, then URL param
+  let result = null;
+  const stored = sessionStorage.getItem("ag_last_prediction");
+  if (stored) { try { result = JSON.parse(stored); } catch {} }
+
+  const urlId = new URLSearchParams(window.location.search).get("id");
+  if (!result && urlId) {
+    try { result = await AgriCropAPI.disease.getById(urlId); } catch {}
+  }
+
+  const loading = document.getElementById("loading-state");
+  const content = document.getElementById("result-content");
+
+  if (!result) {
+    loading.innerHTML = `<div class="text-center py-5"><div style="font-size:3rem;">❌</div><h5 class="mt-3 text-muted">No prediction found</h5><a href="upload.html" class="btn-ag-primary mt-3">Upload Leaf Image</a></div>`;
+    return;
+  }
+
+  loading.classList.add("hidden");
+  content.classList.remove("hidden");
+  content.classList.add("animate-fade-up");
+
+  // Image
+  const img = document.getElementById("result-image");
+  if (img && result.image_url) img.src = result.image_url;
+
+  // Disease name
+  document.getElementById("disease-name").textContent = result.disease_name || "Unknown";
+  document.getElementById("crop-type").textContent = result.crop_type || "Auto-detected";
+  document.getElementById("affected-area").textContent = result.affected_area_percent ? `${result.affected_area_percent.toFixed(1)}%` : (result.is_healthy ? "0%" : "—");
+
+  // Severity badge
+  const sevEl = document.getElementById("result-severity-badge");
+  if (sevEl) sevEl.innerHTML = Utils.severityBadge(result.severity || "unknown");
+
+  // Page title update
+  document.getElementById("result-title").textContent = result.is_healthy ? "✅ Crop is Healthy!" : `🦠 ${result.disease_name}`;
+
+  // Confidence ring
+  const pct = (result.confidence || 0) * 100;
+  const circle = document.getElementById("conf-circle");
+  const circumference = 345.6;
+  const offset = circumference - (pct / 100) * circumference;
+  setTimeout(() => {
+    circle.style.strokeDashoffset = offset;
+    circle.style.stroke = pct > 80 ? "#dc2626" : pct > 60 ? "#f97316" : "#16a34a";
+    Utils.animateCounter(document.getElementById("conf-value"), pct, 1500, "%");
+  }, 300);
+
+  // Model version
+  const mvEl = document.getElementById("model-version-label");
+  if (mvEl) mvEl.textContent = `${result.model_version || "MobileNetV2-v1"} ${result.stub_mode ? "· Demo Mode" : ""}`;
+
+  // Top predictions
+  const topEl = document.getElementById("top-predictions");
+  if (topEl && result.top_predictions?.length) {
+    topEl.innerHTML = result.top_predictions.map((p, i) => `
+      <div class="d-flex align-items-center gap-3 mb-2">
+        <div style="font-size:0.78rem;color:var(--text-muted);width:16px;">#${i+1}</div>
+        <div class="truncate" style="flex:1;font-size:0.82rem;">${p.class}</div>
+        <div class="top-pred-bar"><div class="top-pred-fill" style="width:${(p.probability*100).toFixed(1)}%"></div></div>
+        <div style="font-size:0.78rem;font-weight:600;color:var(--primary-light);width:45px;text-align:right;">${(p.probability*100).toFixed(1)}%</div>
+      </div>`).join("");
+  }
+
+  // Treatments
+  const treatEl = document.getElementById("treatment-list");
+  if (treatEl) {
+    const treats = result.treatments || [];
+    treatEl.innerHTML = treats.length
+      ? treats.map((t, i) => `<div class="treatment-step"><div class="treatment-num">${i+1}</div><div style="font-size:0.88rem;">${t}</div></div>`).join("")
+      : '<p class="text-muted" style="font-size:0.85rem;">No specific treatments needed. Crop appears healthy!</p>';
+  }
+
+  // Prevention
+  const prevEl = document.getElementById("prevention-list");
+  if (prevEl) {
+    const tips = result.prevention_tips || [];
+    prevEl.innerHTML = tips.map(t => `<div class="d-flex gap-2 mb-2"><span style="color:var(--primary-light);flex-shrink:0;">✓</span><div style="font-size:0.88rem;">${t}</div></div>`).join("");
+  }
+
+  // Pesticides
+  const pestEl = document.getElementById("pesticide-list");
+  if (pestEl) {
+    pestEl.innerHTML = (result.recommended_pesticides || []).map(p =>
+      `<span class="tech-badge" style="background:rgba(220,38,38,0.1);border-color:rgba(220,38,38,0.2);color:#ef4444;">🧪 ${p}</span>`).join("");
+    if (!result.recommended_pesticides?.length) pestEl.innerHTML = '<small class="text-muted">No pesticides recommended.</small>';
+  }
+  const orgEl = document.getElementById("organic-list");
+  if (orgEl) {
+    orgEl.innerHTML = (result.organic_alternatives || []).map(o =>
+      `<span class="tech-badge" style="background:rgba(22,163,74,0.1);border-color:rgba(22,163,74,0.2);color:#22c55e;">🌿 ${o}</span>`).join("");
+    if (!result.organic_alternatives?.length) orgEl.innerHTML = '<small class="text-muted">No organic alternatives listed.</small>';
+  }
+
+  // Report generation
+  document.getElementById("generate-report-btn")?.addEventListener("click", async () => {
+    Utils.showLoading("Generating PDF report...");
+    try {
+      const res = await AgriCropAPI.reports.generate({ report_type: "disease" });
+      Utils.hideLoading();
+      if (res.file_url) { Utils.showToast("Report ready!", "success"); Utils.downloadURL(res.file_url, `disease_report.pdf`); }
+    } catch { Utils.hideLoading(); Utils.showToast("Report generation failed.", "error"); }
+  });
+});
+</script>
+</body>
+</html>

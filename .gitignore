@@ -1,0 +1,104 @@
+# =====================================================
+# AgriCrop – .gitignore
+# =====================================================
+
+# ----- Environment & Secrets -----
+.env
+serviceAccountKey.json
+*.pem
+*.key
+*.p12
+*.p8
+firebase-adminsdk-*.json
+google-credentials.json
+
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ----- Virtual Environments -----
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ----- Jupyter -----
+.ipynb_checkpoints
+*.ipynb
+
+# ----- AI Models & Large Files -----
+ai_models/saved_models/*.h5
+ai_models/saved_models/*.pkl
+ai_models/saved_models/*.pt
+ai_models/saved_models/*.pth
+ai_models/saved_models/*.keras
+datasets/raw/
+datasets/*.zip
+datasets/*.tar.gz
+
+# ----- Logs -----
+logs/*.log
+logs/*.txt
+*.log
+
+# ----- Node.js / Frontend -----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.next/
+out/
+dist/
+build/
+.nuxt/
+.output/
+.cache/
+.parcel-cache/
+
+# ----- Docker -----
+.docker/
+
+# ----- pytest -----
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ----- IDE & OS -----
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----- Temporary Files -----
+*.tmp
+*.bak
+*.orig
+/tmp/

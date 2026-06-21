@@ -1,0 +1,134 @@
+/**
+ * AgriCrop – API Client Module
+ * Typed wrapper around all backend REST endpoints.
+ * Automatically attaches Authorization header using Auth.getToken().
+ */
+
+window.API_BASE = window.location.hostname === "localhost"
+  ? "http://localhost:8000"
+  : "https://agricrop-backend.onrender.com"; // Update with your Render URL
+
+const AgriCropAPI = (() => {
+  const BASE = () => window.API_BASE;
+
+  // ── Core Fetch Wrapper ──────────────────────────────────────────────────
+  async function request(method, endpoint, body = null, isFormData = false) {
+    const token = window.Auth?.getToken();
+    const headers = {};
+
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (!isFormData && body) headers["Content-Type"] = "application/json";
+
+    const config = {
+      method: method.toUpperCase(),
+      headers,
+      body: body
+        ? (isFormData ? body : JSON.stringify(body))
+        : undefined,
+    };
+
+    try {
+      const res = await fetch(`${BASE()}/api/v1${endpoint}`, config);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const errMsg = data?.detail || data?.message || `HTTP ${res.status}`;
+        throw new Error(errMsg);
+      }
+      return data;
+    } catch (err) {
+      console.error(`[API] ${method} ${endpoint}:`, err.message);
+      throw err;
+    }
+  }
+
+  const get    = (ep)           => request("GET",    ep);
+  const post   = (ep, body)     => request("POST",   ep, body);
+  const put    = (ep, body)     => request("PUT",    ep, body);
+  const del    = (ep)           => request("DELETE", ep);
+  const postFD = (ep, formData) => request("POST",   ep, formData, true);
+
+  // ── Auth Endpoints ──────────────────────────────────────────────────────
+  const auth = {
+    register:      (payload)   => post("/auth/register", payload),
+    me:            ()          => get("/auth/me"),
+    updateProfile: (payload)   => put("/auth/me", payload),
+    forgotPassword:(email)     => post(`/auth/forgot-password?email=${encodeURIComponent(email)}`),
+    addFarm:       (payload)   => post("/auth/farms", payload),
+    getMyFarms:    ()          => get("/auth/farms"),
+  };
+
+  // ── Disease Endpoints ───────────────────────────────────────────────────
+  const disease = {
+    predict: (formData) => postFD("/disease/predict", formData),
+
+    getHistory: (page = 1, pageSize = 20) =>
+      get(`/disease/history?page=${page}&page_size=${pageSize}`),
+
+    getById: (id) => get(`/disease/${id}`),
+  };
+
+  // ── Soil Endpoints ──────────────────────────────────────────────────────
+  const soil = {
+    predict: (payload) => post("/soil/predict", payload),
+
+    getHistory: (page = 1, pageSize = 20) =>
+      get(`/soil/history?page=${page}&page_size=${pageSize}`),
+
+    getById: (id) => get(`/soil/${id}`),
+  };
+
+  // ── Map Endpoints ───────────────────────────────────────────────────────
+  const map = {
+    getMarkers: (filters = {}) => {
+      const params = new URLSearchParams(
+        Object.fromEntries(Object.entries(filters).filter(([, v]) => v))
+      ).toString();
+      return get(`/map/markers${params ? "?" + params : ""}`);
+    },
+    getHeatmap:       () => get("/map/heatmap"),
+    getDiseaseHotspots: () => get("/map/disease-hotspots"),
+    getMyFarms:       () => get("/map/my-farms"),
+  };
+
+  // ── History Endpoints ───────────────────────────────────────────────────
+  const history = {
+    getCombined: (page = 1, pageSize = 20, type = "all") =>
+      get(`/history/?page=${page}&page_size=${pageSize}&prediction_type=${type}`),
+
+    getDashboard: () => get("/history/dashboard"),
+  };
+
+  // ── Notifications ───────────────────────────────────────────────────────
+  const notifications = {
+    list:         (unreadOnly = false) => get(`/notifications/?unread_only=${unreadOnly}`),
+    unreadCount:  ()                   => get("/notifications/unread-count"),
+    markRead:     (id)                 => post(`/notifications/${id}/read`),
+    markAllRead:  ()                   => post("/notifications/read-all"),
+  };
+
+  // ── Reports ─────────────────────────────────────────────────────────────
+  const reports = {
+    generate: (payload) => post("/reports/generate", payload),
+    list:     ()        => get("/reports/"),
+    getById:  (id)      => get(`/reports/${id}`),
+  };
+
+  // ── Admin ───────────────────────────────────────────────────────────────
+  const admin = {
+    getUsers:       (page = 1, role = "all") => get(`/admin/users?page=${page}&role=${role}`),
+    getUser:        (uid)                    => get(`/admin/users/${uid}`),
+    deleteUser:     (uid)                    => del(`/admin/users/${uid}`),
+    toggleStatus:   (uid)                    => post(`/admin/users/${uid}/toggle-status`),
+    getAnalytics:   ()                       => get("/admin/analytics"),
+    getOutbreaks:   (severity = "severe")    => get(`/admin/disease-outbreaks?severity=${severity}`),
+    getAllReports:   (page = 1)              => get(`/admin/reports?page=${page}`),
+  };
+
+  // ── Health Check ────────────────────────────────────────────────────────
+  const health = () => fetch(`${BASE()}/api/health`).then(r => r.json());
+
+  return { auth, disease, soil, map, history, notifications, reports, admin, health, request };
+})();
+
+window.AgriCropAPI = AgriCropAPI;

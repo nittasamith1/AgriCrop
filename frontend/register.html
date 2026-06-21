@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register – AgriCrop</title>
+  <meta name="description" content="Create your AgriCrop account and start detecting plant diseases and predicting soil moisture with AI."/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="css/main.css" rel="stylesheet"/><link href="css/dark-mode.css" rel="stylesheet"/><link href="css/animations.css" rel="stylesheet"/>
+  <style>
+    .auth-layout { min-height:100vh; display:grid; grid-template-columns:1fr 1fr; }
+    @media(max-width:768px){.auth-layout{grid-template-columns:1fr;}.auth-banner{display:none!important;}}
+    .auth-banner { background:linear-gradient(145deg,#0a1a0f,#0f2420); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:3rem; position:relative; overflow:hidden; }
+    .auth-panel { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:3rem 2rem; background:var(--bg-base); overflow-y:auto; }
+    .auth-box { width:100%; max-width:460px; }
+    .role-btn { flex:1; padding:0.85rem; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-card); color:var(--text-secondary); font-size:0.9rem; font-weight:600; cursor:pointer; transition:all var(--trans-fast); text-align:center; }
+    .role-btn.active { border-color:var(--primary); background:var(--primary-glow); color:var(--primary-light); }
+    .strength-bar { height:4px; border-radius:2px; transition:all 0.3s ease; }
+  </style>
+</head>
+<body>
+<div class="auth-layout">
+  <!-- Left Banner -->
+  <div class="auth-banner">
+    <div class="hero-grid" style="opacity:0.3;"></div>
+    <div style="position:relative;z-index:2;text-align:center;max-width:380px;">
+      <div class="animate-float" style="font-size:5rem;margin-bottom:1.5rem;">🌾</div>
+      <h2 class="text-gradient" style="font-family:'Space Grotesk',sans-serif;font-size:2rem;font-weight:800;">Join AgriCrop</h2>
+      <p style="color:rgba(255,255,255,0.6);font-size:0.9rem;margin-top:0.75rem;line-height:1.7;">
+        Connect with India's most advanced AI-powered crop health monitoring network.
+      </p>
+      <div class="mt-4" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;text-align:left;">
+        <div style="background:rgba(22,163,74,0.1);border:1px solid rgba(22,163,74,0.2);border-radius:10px;padding:1rem;">
+          <div style="font-size:1.5rem;margin-bottom:0.5rem;">🤖</div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);">AI Disease Detection</div>
+        </div>
+        <div style="background:rgba(37,99,235,0.1);border:1px solid rgba(37,99,235,0.2);border-radius:10px;padding:1rem;">
+          <div style="font-size:1.5rem;margin-bottom:0.5rem;">💧</div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);">Soil AI Predictions</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:1rem;">
+          <div style="font-size:1.5rem;margin-bottom:0.5rem;">🗺️</div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);">GIS Disease Maps</div>
+        </div>
+        <div style="background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.2);border-radius:10px;padding:1rem;">
+          <div style="font-size:1.5rem;margin-bottom:0.5rem;">📄</div>
+          <div style="font-size:0.8rem;color:rgba(255,255,255,0.7);">PDF Reports</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="auth-panel">
+    <div class="auth-box animate-fade-up">
+      <div class="d-flex align-items-center justify-content-between mb-4">
+        <a href="login.html" style="color:var(--text-muted);font-size:0.85rem;text-decoration:none;">← Back to Login</a>
+        <button id="theme-toggle" aria-label="Toggle theme"><span class="toggle-icon sun-icon">☀️</span><span class="toggle-icon moon-icon">🌙</span></button>
+      </div>
+
+      <div class="text-gradient" style="font-family:'Space Grotesk',sans-serif;font-size:1.6rem;font-weight:800;margin-bottom:0.25rem;">🌱 Create Account</div>
+      <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1.75rem;">Join thousands of farmers using AI for smarter agriculture</p>
+
+      <!-- Role Selection -->
+      <div class="ag-form-group">
+        <label class="ag-label">I am a</label>
+        <div class="d-flex gap-2">
+          <button type="button" class="role-btn active" id="role-farmer" onclick="selectRole('farmer')">🌾 Farmer</button>
+          <button type="button" class="role-btn" id="role-admin" onclick="selectRole('admin')">🔧 Admin</button>
+        </div>
+        <input type="hidden" id="role-input" value="farmer"/>
+      </div>
+
+      <form id="register-form" novalidate>
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="ag-form-group">
+              <label class="ag-label">Full Name</label>
+              <div class="input-wrapper">
+                <span class="input-icon">👤</span>
+                <input type="text" id="name-input" class="ag-input" placeholder="Rajesh Kumar" required/>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="ag-form-group">
+              <label class="ag-label">Email Address</label>
+              <div class="input-wrapper">
+                <span class="input-icon">📧</span>
+                <input type="email" id="email-input" class="ag-input" placeholder="farmer@example.com" required/>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="ag-form-group">
+              <label class="ag-label">State</label>
+              <select id="state-input" class="ag-input ag-select">
+                <option value="">Select State</option>
+                <option>Maharashtra</option><option>Karnataka</option><option>Tamil Nadu</option>
+                <option>Andhra Pradesh</option><option>Uttar Pradesh</option><option>Punjab</option>
+                <option>Haryana</option><option>Gujarat</option><option>Rajasthan</option>
+                <option>Madhya Pradesh</option><option>Bihar</option><option>West Bengal</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="ag-form-group">
+              <label class="ag-label">Phone (Optional)</label>
+              <div class="input-wrapper">
+                <span class="input-icon">📱</span>
+                <input type="tel" id="phone-input" class="ag-input" placeholder="+91 9876543210"/>
+              </div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="ag-form-group mb-1">
+              <label class="ag-label">Password</label>
+              <div class="input-wrapper">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="password-input" class="ag-input" placeholder="Minimum 8 characters" required id="password-input"/>
+              </div>
+            </div>
+            <!-- Password strength -->
+            <div id="strength-bar-container" style="display:none;margin-top:6px;">
+              <div style="height:4px;background:var(--bg-input);border-radius:2px;overflow:hidden;">
+                <div id="strength-bar" class="strength-bar" style="width:0%;height:100%;"></div>
+              </div>
+              <small id="strength-label" style="font-size:0.72rem;"></small>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="ag-form-group">
+              <label class="ag-label">Confirm Password</label>
+              <div class="input-wrapper">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="confirm-password-input" class="ag-input" placeholder="Repeat password" required/>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terms -->
+        <div class="d-flex align-items-start gap-2 mb-3">
+          <input type="checkbox" id="terms-check" class="mt-1" required/>
+          <label for="terms-check" style="font-size:0.82rem;color:var(--text-muted);">
+            I agree to the <a href="#" style="color:var(--primary-light);">Terms of Service</a> and <a href="#" style="color:var(--primary-light);">Privacy Policy</a>
+          </label>
+        </div>
+
+        <!-- Error -->
+        <div id="register-error" class="hidden mb-3" style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);color:#ef4444;padding:0.75rem 1rem;border-radius:10px;font-size:0.85rem;"></div>
+
+        <button type="submit" id="register-btn" class="btn-ag-primary w-100" style="padding:0.85rem;font-size:1rem;justify-content:center;">
+          🌱 Create Account
+        </button>
+      </form>
+      <p class="text-center mt-3" style="font-size:0.85rem;color:var(--text-muted);">
+        Already have an account? <a href="login.html" style="color:var(--primary-light);font-weight:600;">Sign in →</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let selectedRole = "farmer";
+
+function selectRole(role) {
+  selectedRole = role;
+  document.getElementById("role-input").value = role;
+  document.getElementById("role-farmer").classList.toggle("active", role === "farmer");
+  document.getElementById("role-admin").classList.toggle("active", role === "admin");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  firebase.auth().onAuthStateChanged(u => { if (u) window.location.href = "/dashboard.html"; });
+
+  // Password strength
+  document.getElementById("password-input")?.addEventListener("input", function() {
+    const val = this.value;
+    const container = document.getElementById("strength-bar-container");
+    const bar = document.getElementById("strength-bar");
+    const label = document.getElementById("strength-label");
+    container.style.display = val ? "block" : "none";
+    let strength = 0;
+    if (val.length >= 8) strength++;
+    if (/[A-Z]/.test(val)) strength++;
+    if (/[0-9]/.test(val)) strength++;
+    if (/[^a-zA-Z0-9]/.test(val)) strength++;
+    const levels = [
+      { color: "#dc2626", label: "Weak", width: "25%" },
+      { color: "#f97316", label: "Fair", width: "50%" },
+      { color: "#f59e0b", label: "Good", width: "75%" },
+      { color: "#16a34a", label: "Strong", width: "100%" },
+    ];
+    const lvl = levels[Math.min(strength - 1, 3)] || levels[0];
+    bar.style.width = strength > 0 ? lvl.width : "0";
+    bar.style.background = lvl.color;
+    label.textContent = strength > 0 ? lvl.label : "";
+    label.style.color = lvl.color;
+  });
+
+  // Register form
+  document.getElementById("register-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name    = document.getElementById("name-input").value.trim();
+    const email   = document.getElementById("email-input").value.trim();
+    const password = document.getElementById("password-input").value;
+    const confirm  = document.getElementById("confirm-password-input").value;
+    const state    = document.getElementById("state-input").value;
+    const phone    = document.getElementById("phone-input").value.trim();
+    const terms    = document.getElementById("terms-check").checked;
+    const errEl    = document.getElementById("register-error");
+    const btn      = document.getElementById("register-btn");
+
+    errEl.classList.add("hidden");
+    if (!name || !email || !password) { errEl.textContent = "Please fill in all required fields."; errEl.classList.remove("hidden"); return; }
+    if (password !== confirm)          { errEl.textContent = "Passwords do not match."; errEl.classList.remove("hidden"); return; }
+    if (password.length < 8)           { errEl.textContent = "Password must be at least 8 characters."; errEl.classList.remove("hidden"); return; }
+    if (!terms)                        { errEl.textContent = "Please accept the Terms of Service."; errEl.classList.remove("hidden"); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="ag-spinner ag-spinner-sm"></span> Creating account...';
+
+    const result = await Auth.register(name, email, password, selectedRole, phone || null);
+    if (result.success) {
+      Utils.showToast("Account created! Please verify your email.", "success");
+      setTimeout(() => window.location.href = "/login.html", 2000);
+    } else {
+      errEl.textContent = result.message;
+      errEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.innerHTML = "🌱 Create Account";
+    }
+  });
+});
+</script>
+</body>
+</html>
