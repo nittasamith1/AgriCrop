@@ -38,13 +38,15 @@ function renderStats(data) {
     { id: "stat-moisture",     value: data.average_soil_moisture || 0,      suffix: "%" },
     { id: "stat-irrigation",   value: data.irrigation_needed_count || 0,    suffix: "" },
   ];
-  stats.forEach(s => {
-    const el = document.getElementById(s.id);
-    if (el) Utils.animateCounter(el, s.value, 1200, s.suffix);
-  });
-
   const statsGrid = document.getElementById("stats-grid");
   if (statsGrid) statsGrid.innerHTML = buildStatsHTML(data);
+
+  setTimeout(() => {
+    stats.forEach(s => {
+      const el = document.getElementById(s.id);
+      if (el) Utils.animateCounter(el, s.value, 1200, s.suffix);
+    });
+  }, 50);
 }
 
 function buildStatsHTML(data) {
@@ -101,14 +103,6 @@ function renderCharts(data) {
   Charts.renderSeverityDonut("severity-chart", data.severity_breakdown || {});
   Charts.renderMonthlyBar("monthly-chart", data.monthly_disease_counts, data.monthly_soil_counts);
   Charts.renderHealthPie("health-pie-chart", data.healthy_count || 0, data.diseased_count || 0);
-
-  // Animate counter numbers
-  setTimeout(() => {
-    document.querySelectorAll("[id^='stat-']").forEach(el => {
-      const val = parseFloat(el.textContent) || 0;
-      Utils.animateCounter(el, val, 1000);
-    });
-  }, 300);
 }
 
 function renderRecentPredictions(data) {

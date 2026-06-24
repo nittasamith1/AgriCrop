@@ -102,3 +102,6 @@ desktop.ini
 *.bak
 *.orig
 /tmp/
+tmp/
+/temp/
+temp/

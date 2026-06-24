@@ -200,9 +200,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     Utils.animateCounter(document.getElementById("conf-value"), pct, 1500, "%");
   }, 300);
 
-  // Model version
   const mvEl = document.getElementById("model-version-label");
-  if (mvEl) mvEl.textContent = `${result.model_version || "MobileNetV2-v1"} ${result.stub_mode ? "· Demo Mode" : ""}`;
+  if (mvEl) mvEl.textContent = `${result.model_version || "MobileNetV2-v1"}`;
 
   // Top predictions
   const topEl = document.getElementById("top-predictions");

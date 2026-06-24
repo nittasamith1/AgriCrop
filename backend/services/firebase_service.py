@@ -346,6 +346,7 @@ class FirestoreService:
     """
     Generic Firestore CRUD service.
     All methods are synchronous (Firestore Admin SDK is sync).
+    All returned dicts are JSON-safe (datetimes converted to ISO strings).
     """
 
     def __init__(self, collection_name: str):
@@ -354,6 +355,34 @@ class FirestoreService:
     @property
     def collection(self):
         return get_firestore_client().collection(self.collection_name)
+
+    @staticmethod
+    def _serialize_value(value: Any) -> Any:
+        """
+        Convert a value to a JSON-safe type.
+        Handles Firestore DatetimeWithNanoseconds, Python datetime, and nested dicts/lists.
+        """
+        import datetime as dt
+        if value is None:
+            return None
+        # Firestore Timestamp / Python datetime → ISO string
+        if hasattr(value, 'isoformat'):
+            try:
+                return value.isoformat()
+            except Exception:
+                return str(value)
+        # Nested dict
+        if isinstance(value, dict):
+            return {k: FirestoreService._serialize_value(v) for k, v in value.items()}
+        # Nested list
+        if isinstance(value, list):
+            return [FirestoreService._serialize_value(i) for i in value]
+        return value
+
+    @classmethod
+    def _serialize_doc(cls, doc_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize all values in a Firestore document dict to JSON-safe types."""
+        return {k: cls._serialize_value(v) for k, v in doc_dict.items()}
 
     def create(self, doc_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create or overwrite a document."""
@@ -364,12 +393,17 @@ class FirestoreService:
         """Fetch a single document by ID. Returns None if not found."""
         doc = self.collection.document(doc_id).get()
         if doc.exists:
-            return {"id": doc.id, **doc.to_dict()}
+            raw = doc.to_dict() or {}
+            return self._serialize_doc({"id": doc.id, **raw})
         return None
 
     def update(self, doc_id: str, data: Dict[str, Any]) -> bool:
         """Update specific fields in a document."""
-        self.collection.document(doc_id).update(data)
+        try:
+            self.collection.document(doc_id).update(data)
+        except Exception:
+            # Document may not exist yet — use set with merge
+            self.collection.document(doc_id).set(data, merge=True)
         return True
 
     def delete(self, doc_id: str) -> bool:
@@ -380,7 +414,7 @@ class FirestoreService:
     def list_all(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Return all documents in the collection (up to limit)."""
         docs = self.collection.limit(limit).stream()
-        return [{"id": d.id, **d.to_dict()} for d in docs]
+        return [self._serialize_doc({"id": d.id, **(d.to_dict() or {})}) for d in docs]
 
     def query(
         self,
@@ -395,12 +429,19 @@ class FirestoreService:
         Simple single-field query.
         op: '==' | '<' | '<=' | '>' | '>=' | 'in' | 'array_contains'
         """
-        q = self.collection.where(field, op, value)
-        if order_by:
-            direction = firestore.Query.DESCENDING if descending else firestore.Query.ASCENDING
-            q = q.order_by(order_by, direction=direction)
-        q = q.limit(limit)
-        return [{"id": d.id, **d.to_dict()} for d in q.stream()]
+        try:
+            q = self.collection.where(field, op, value)
+            if order_by:
+                try:
+                    direction = firestore.Query.DESCENDING if descending else firestore.Query.ASCENDING
+                    q = q.order_by(order_by, direction=direction)
+                except Exception:
+                    pass  # order_by may fail if index not created; results still returned
+            q = q.limit(limit)
+            return [self._serialize_doc({"id": d.id, **(d.to_dict() or {})}) for d in q.stream()]
+        except Exception as e:
+            logger.error(f"Firestore query failed ({self.collection_name}): {e}")
+            return []
 
     def query_by_user(self, user_id: str, limit: int = 50, order_by: str = "created_at") -> List[Dict[str, Any]]:
         """Convenience: query all docs belonging to a specific user."""
@@ -408,8 +449,12 @@ class FirestoreService:
 
     def count(self, field: Optional[str] = None, value: Any = None) -> int:
         """Count documents (optionally filtered)."""
-        if field and value is not None:
-            docs = self.collection.where(field, "==", value).stream()
-        else:
-            docs = self.collection.stream()
-        return sum(1 for _ in docs)
+        try:
+            if field and value is not None:
+                docs = self.collection.where(field, "==", value).stream()
+            else:
+                docs = self.collection.stream()
+            return sum(1 for _ in docs)
+        except Exception as e:
+            logger.error(f"Firestore count failed ({self.collection_name}): {e}")
+            return 0

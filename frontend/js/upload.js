@@ -103,7 +103,8 @@ document.addEventListener("DOMContentLoaded", () => {
     uploadBtn.innerHTML = '<span class="ag-spinner ag-spinner-sm"></span> Analyzing...';
 
     if (progressBar) {
-      progressBar.style.display = "block";
+      progressBar.classList.remove("hidden");
+      progressBar.style.display = ""; // clear any inline none
       progressBar.querySelector(".ag-progress-bar").style.width = "30%";
     }
 
@@ -138,7 +139,7 @@ document.addEventListener("DOMContentLoaded", () => {
       Utils.showToast(err.message || "Upload failed. Please try again.", "error");
       uploadBtn.disabled = false;
       uploadBtn.innerHTML = '🔬 Analyze Crop';
-      if (progressBar) progressBar.style.display = "none";
+      if (progressBar) progressBar.classList.add("hidden");
     }
   });
 

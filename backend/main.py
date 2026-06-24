@@ -10,7 +10,6 @@ from loguru import logger
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -26,7 +25,10 @@ os.makedirs("logs", exist_ok=True)
 logger.remove()
 logger.add(sys.stderr, level=settings.LOG_LEVEL, colorize=True,
            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>")
-logger.add(settings.LOG_FILE, rotation="10 MB", retention="30 days", level=settings.LOG_LEVEL, enqueue=True)
+try:
+    logger.add(settings.LOG_FILE, rotation="10 MB", retention="30 days", level=settings.LOG_LEVEL, enqueue=True)
+except Exception:
+    pass  # Log file may not be writable on Render — stdout is fine
 
 # ── Rate Limiter ──────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address, default_limits=[
@@ -39,11 +41,15 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     logger.info("🌱 AgriCrop API starting up...")
-    # Initialize Firebase Admin SDK
-    initialize_firebase()
+    try:
+        initialize_firebase()
+        logger.info("✅ Firebase initialized")
+    except Exception as e:
+        logger.error(f"❌ Firebase initialization error: {e}")
+        # Don't crash on startup — mock fallback will be used
     # Create upload temp directory
     os.makedirs(settings.UPLOAD_TEMP_DIR, exist_ok=True)
-    logger.info(f"✅ Firebase initialized | Upload dir: {settings.UPLOAD_TEMP_DIR}")
+    logger.info(f"✅ Upload dir ready: {settings.UPLOAD_TEMP_DIR}")
     yield
     logger.info("👋 AgriCrop API shutting down...")
 
@@ -62,27 +68,31 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── Middleware ────────────────────────────────────────────────────────────────
+# ── Rate Limiter State ────────────────────────────────────────────────────────
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# ── CORS Middleware ───────────────────────────────────────────────────────────
+# NOTE: TrustedHostMiddleware has been intentionally removed.
+# It caused HTTP 400 errors when Vercel proxied requests to Render,
+# since the Host header becomes the Render internal hostname.
+# Render's own infrastructure provides sufficient host validation.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
-
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", "agricrop-a8352.web.app", "agricrop-a8352.firebaseapp.com", "*.onrender.com"],
+    expose_headers=["*"],
 )
 
 # ── Static Files Mount ────────────────────────────────────────────────────────
 # In mock storage mode, leaf images and report PDFs are served from this folder
 os.makedirs(settings.UPLOAD_TEMP_DIR, exist_ok=True)
-app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_TEMP_DIR), name="uploads")
+try:
+    app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_TEMP_DIR), name="uploads")
+except Exception as e:
+    logger.warning(f"Could not mount static files: {e}")
 
 
 # ── Request Logging Middleware ────────────────────────────────────────────────

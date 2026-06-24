@@ -55,12 +55,8 @@ async def get_combined_history(
 async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     """
     Return summary statistics for the user dashboard.
-    Includes:
-    - Total predictions (disease + soil)
-    - Disease breakdown by severity
-    - Monthly prediction counts
-    - Recent 5 predictions
-    - Farms summary
+    Includes total predictions, severity breakdown, monthly counts,
+    recent predictions, and farms summary.
     """
     uid = current_user["uid"]
 
@@ -76,8 +72,8 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         sev = p.get("severity", "unknown")
         if sev in severity_counts:
             severity_counts[sev] += 1
-        crop = p.get("crop_type", "Unknown")
-        disease = p.get("disease_name", "Unknown")
+        crop = p.get("crop_type") or "Unknown"
+        disease = p.get("disease_name") or "Unknown"
         if crop not in crop_disease_map:
             crop_disease_map[crop] = {}
         crop_disease_map[crop][disease] = crop_disease_map[crop].get(disease, 0) + 1
@@ -92,24 +88,35 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         monthly_disease[month_key] = 0
         monthly_soil[month_key] = 0
 
+    def _parse_created_at(created) -> str:
+        """Parse created_at to YYYY-MM string regardless of whether it's a datetime or ISO string."""
+        if not created:
+            return ""
+        if hasattr(created, "strftime"):
+            # datetime object
+            return created.strftime("%Y-%m")
+        if isinstance(created, str):
+            # ISO string like '2026-06-24T15:00:00+00:00'
+            try:
+                return created[:7]  # 'YYYY-MM'
+            except Exception:
+                return ""
+        return ""
+
     for p in d_preds:
-        created = p.get("created_at")
-        if created and hasattr(created, "strftime"):
-            key = created.strftime("%Y-%m")
-            if key in monthly_disease:
-                monthly_disease[key] += 1
+        key = _parse_created_at(p.get("created_at"))
+        if key in monthly_disease:
+            monthly_disease[key] += 1
 
     for p in s_preds:
-        created = p.get("created_at")
-        if created and hasattr(created, "strftime"):
-            key = created.strftime("%Y-%m")
-            if key in monthly_soil:
-                monthly_soil[key] += 1
+        key = _parse_created_at(p.get("created_at"))
+        if key in monthly_soil:
+            monthly_soil[key] += 1
 
     # Irrigation stats
     irrigation_count = sum(1 for p in s_preds if p.get("irrigation_recommended"))
     avg_moisture = (
-        sum(p.get("predicted_moisture", 0) for p in s_preds) / len(s_preds)
+        sum(p.get("predicted_moisture") or 0 for p in s_preds) / len(s_preds)
         if s_preds else 0
     )
 

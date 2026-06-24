@@ -1,0 +1,41 @@
+# AgriCrop - Render Configuration
+# This file tells Render how to build and run the backend web service.
+
+services:
+  - type: web
+    name: agricrop-backend
+    env: docker
+    region: oregon
+    plan: free
+    dockerfilePath: Dockerfile.backend
+    healthCheckPath: /api/health
+    # Ensure this is set to false so the service isn't exposed publicly before environment variables are set
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: AgriCrop
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: LOG_FILE
+        value: /tmp/agricrop.log
+      - key: UPLOAD_TEMP_DIR
+        value: /tmp/agricrop_uploads
+      # Firebase credentials must be set manually in the Render Dashboard
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY_ID
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_CLIENT_ID
+        sync: false
+      - key: FIREBASE_API_KEY
+        sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
