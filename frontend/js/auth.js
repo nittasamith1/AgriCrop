@@ -147,13 +147,39 @@ const Auth = (() => {
   }
 
   function requireAdmin() {
-    requireAuth();
-    setTimeout(() => {
-      if (getRole() !== "admin") {
+    auth().onAuthStateChanged(async (fbUser) => {
+      if (!fbUser) {
+        window.location.href = "/login.html";
+        return;
+      }
+      
+      // Ensure token is fresh to get latest custom claims if any
+      const token = await fbUser.getIdToken();
+      let role = getRole();
+      
+      // If no role in session or not admin, check backend
+      if (role !== "admin") {
+        try {
+          const res = await fetch(`${window.API_BASE}/api/v1/auth/me`, {
+            headers: { "Authorization": `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const profile = await res.json();
+            setSession(token, profile);
+            role = profile.role || "farmer";
+          }
+        } catch (e) {
+          console.error("Failed to verify admin status", e);
+        }
+      }
+
+      if (role !== "admin") {
         Utils.showToast("Access denied. Admin only.", "error");
         setTimeout(() => window.location.href = "/dashboard.html", 1500);
+      } else {
+        updateNavbarUser();
       }
-    }, 1200);
+    });
   }
 
   // ── Update Navbar ───────────────────────────────────────────────────────
@@ -191,8 +217,7 @@ const Auth = (() => {
 
   // ── Listen for auth state and refresh token periodically ────────────────
   setInterval(async () => {
-    const token = await getFreshToken();
-    if (token) console.debug("Token refreshed silently.");
+    await getFreshToken();
   }, 45 * 60 * 1000); // Every 45 minutes
 
   return {

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://agricrop-a8352.web.app/sitemap.xml

@@ -1,28 +1,33 @@
 /**
  * AgriCrop – Firebase Client Configuration
- * Initialize Firebase SDK for the frontend.
- * Replace the config object values with your actual Firebase project credentials.
+ * Production credentials for agricrop-a8352 Firebase project.
+ *
+ * NOTE: Firebase client config keys are designed to be public.
+ * They identify the Firebase project but do NOT grant admin access.
+ * Security is enforced by Firestore rules and Storage rules.
  */
 
-// Import Firebase modules from CDN (used via script type="module" or importmap)
-// For non-module HTML pages, Firebase is loaded via compat CDN scripts.
-
+// ── Firebase Configuration ────────────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey:            window.ENV?.FIREBASE_API_KEY            || "YOUR_API_KEY",
-  authDomain:        window.ENV?.FIREBASE_AUTH_DOMAIN        || "your-project.firebaseapp.com",
-  projectId:         window.ENV?.FIREBASE_PROJECT_ID         || "your-project-id",
-  storageBucket:     window.ENV?.FIREBASE_STORAGE_BUCKET     || "your-project.appspot.com",
-  messagingSenderId: window.ENV?.FIREBASE_MESSAGING_SENDER_ID|| "YOUR_SENDER_ID",
-  appId:             window.ENV?.FIREBASE_APP_ID             || "YOUR_APP_ID",
-  measurementId:     window.ENV?.FIREBASE_MEASUREMENT_ID     || "G-XXXXXXXXXX",
+  apiKey:            "AIzaSyAR128kYe3qWnpP9cg8_YXPq4xI3ax6vN4",
+  authDomain:        "agricrop-a8352.firebaseapp.com",
+  projectId:         "agricrop-a8352",
+  storageBucket:     "agricrop-a8352.firebasestorage.app",
+  messagingSenderId: "360768814490",
+  appId:             "1:360768814490:web:5d4b2d32d42c32db964e23",
+  measurementId:     "G-85R9GZ2JCL",
 };
 
-const isMock = !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("YOUR_") || firebaseConfig.apiKey.includes("your-");
+// ── Determine if real Firebase credentials are present ────────────────────────
+const isMock = !firebaseConfig.apiKey
+  || firebaseConfig.apiKey === "YOUR_API_KEY"
+  || firebaseConfig.apiKey.startsWith("YOUR_");
 
 let firebaseAuth;
 let firebaseStorage;
 
 if (isMock) {
+  // ── Mock Fallback Mode (local dev without credentials) ─────────────────────
   console.warn("⚠️ Firebase is NOT configured. Enabling local mock fallback auth mode.");
 
   class MockUser {
@@ -116,7 +121,9 @@ if (isMock) {
   class MockStorage {
     ref() {
       return {
-        put: async (file) => ({ ref: { getDownloadURL: async () => "http://localhost:8000/static/uploads/" + file.name } })
+        put: async (file) => ({
+          ref: { getDownloadURL: async () => window.API_BASE + "/static/uploads/" + file.name }
+        })
       };
     }
   }
@@ -125,23 +132,44 @@ if (isMock) {
   firebaseStorage = mockStorageInstance;
 
 } else {
-  // Initialize Real Firebase SDK
-  if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
+  // ── Initialize Real Firebase SDK ───────────────────────────────────────────
+  try {
+    if (!firebase.apps || !firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    firebaseAuth = firebase.auth();
+    firebaseStorage = firebase.storage();
+
+    // Persist auth session in localStorage (survives browser close)
+    firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e => {
+      console.warn("Firebase persistence error:", e);
+    });
+
+    // Enable Firestore offline persistence if available
+    if (firebase.firestore) {
+      firebase.firestore().enablePersistence({ synchronizeTabs: true }).catch(e => {
+        if (e.code !== "failed-precondition" && e.code !== "unimplemented") {
+          console.warn("Firestore persistence error:", e);
+        }
+      });
+    }
+
+  } catch (initErr) {
+    console.error("Firebase initialization failed:", initErr);
   }
-  firebaseAuth = firebase.auth();
-  firebaseStorage = firebase.storage();
-  firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 }
 
-// ── Auth state change broadcaster ───────────────────────────────────────
-firebaseAuth.onAuthStateChanged((user) => {
-  window.dispatchEvent(new CustomEvent("ag:authStateChanged", { detail: { user } }));
-});
+// ── Auth state change broadcaster ─────────────────────────────────────────────
+if (firebaseAuth) {
+  firebaseAuth.onAuthStateChanged((user) => {
+    window.dispatchEvent(new CustomEvent("ag:authStateChanged", { detail: { user } }));
+  });
+}
 
-// ── Export for use by other modules ─────────────────────────────────────
+// ── Export for use by other modules ───────────────────────────────────────────
 window.AgriCropFirebase = {
   auth:    firebaseAuth,
   storage: firebaseStorage,
   config:  firebaseConfig,
+  isMock:  isMock,
 };

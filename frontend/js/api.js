@@ -4,9 +4,22 @@
  * Automatically attaches Authorization header using Auth.getToken().
  */
 
-window.API_BASE = window.location.hostname === "localhost"
-  ? "http://localhost:8000"
-  : "https://agricrop-backend.onrender.com"; // Update with your Render URL
+// ── API Base URL Configuration ─────────────────────────────────────────────
+// - Local development:  FastAPI runs on localhost:8000
+// - Firebase Hosting:   Use empty string (relative) — firebase.json rewrites /api/** to Cloud Run
+//                       Falls back to direct backend URL if defined
+(function () {
+  const hostname = window.location.hostname;
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    // If you want local frontend to talk to production backend, you can use the render url here.
+    // Otherwise keep it as http://localhost:8000 for full local dev.
+    window.API_BASE = "https://agricrop-backend.onrender.com";
+  } else {
+    // On Vercel (or Firebase), /api/** is rewritten to the backend by vercel.json.
+    // An empty string means requests are sent to the same origin, preventing CORS errors.
+    window.API_BASE = "";
+  }
+})();
 
 const AgriCropAPI = (() => {
   const BASE = () => window.API_BASE;
@@ -42,20 +55,20 @@ const AgriCropAPI = (() => {
     }
   }
 
-  const get    = (ep)           => request("GET",    ep);
-  const post   = (ep, body)     => request("POST",   ep, body);
-  const put    = (ep, body)     => request("PUT",    ep, body);
-  const del    = (ep)           => request("DELETE", ep);
-  const postFD = (ep, formData) => request("POST",   ep, formData, true);
+  const get = (ep) => request("GET", ep);
+  const post = (ep, body) => request("POST", ep, body);
+  const put = (ep, body) => request("PUT", ep, body);
+  const del = (ep) => request("DELETE", ep);
+  const postFD = (ep, formData) => request("POST", ep, formData, true);
 
   // ── Auth Endpoints ──────────────────────────────────────────────────────
   const auth = {
-    register:      (payload)   => post("/auth/register", payload),
-    me:            ()          => get("/auth/me"),
-    updateProfile: (payload)   => put("/auth/me", payload),
-    forgotPassword:(email)     => post(`/auth/forgot-password?email=${encodeURIComponent(email)}`),
-    addFarm:       (payload)   => post("/auth/farms", payload),
-    getMyFarms:    ()          => get("/auth/farms"),
+    register: (payload) => post("/auth/register", payload),
+    me: () => get("/auth/me"),
+    updateProfile: (payload) => put("/auth/me", payload),
+    forgotPassword: (email) => post(`/auth/forgot-password?email=${encodeURIComponent(email)}`),
+    addFarm: (payload) => post("/auth/farms", payload),
+    getMyFarms: () => get("/auth/farms"),
   };
 
   // ── Disease Endpoints ───────────────────────────────────────────────────
@@ -86,9 +99,9 @@ const AgriCropAPI = (() => {
       ).toString();
       return get(`/map/markers${params ? "?" + params : ""}`);
     },
-    getHeatmap:       () => get("/map/heatmap"),
+    getHeatmap: () => get("/map/heatmap"),
     getDiseaseHotspots: () => get("/map/disease-hotspots"),
-    getMyFarms:       () => get("/map/my-farms"),
+    getMyFarms: () => get("/map/my-farms"),
   };
 
   // ── History Endpoints ───────────────────────────────────────────────────
@@ -101,28 +114,28 @@ const AgriCropAPI = (() => {
 
   // ── Notifications ───────────────────────────────────────────────────────
   const notifications = {
-    list:         (unreadOnly = false) => get(`/notifications/?unread_only=${unreadOnly}`),
-    unreadCount:  ()                   => get("/notifications/unread-count"),
-    markRead:     (id)                 => post(`/notifications/${id}/read`),
-    markAllRead:  ()                   => post("/notifications/read-all"),
+    list: (unreadOnly = false) => get(`/notifications/?unread_only=${unreadOnly}`),
+    unreadCount: () => get("/notifications/unread-count"),
+    markRead: (id) => post(`/notifications/${id}/read`),
+    markAllRead: () => post("/notifications/read-all"),
   };
 
   // ── Reports ─────────────────────────────────────────────────────────────
   const reports = {
     generate: (payload) => post("/reports/generate", payload),
-    list:     ()        => get("/reports/"),
-    getById:  (id)      => get(`/reports/${id}`),
+    list: () => get("/reports/"),
+    getById: (id) => get(`/reports/${id}`),
   };
 
   // ── Admin ───────────────────────────────────────────────────────────────
   const admin = {
-    getUsers:       (page = 1, role = "all") => get(`/admin/users?page=${page}&role=${role}`),
-    getUser:        (uid)                    => get(`/admin/users/${uid}`),
-    deleteUser:     (uid)                    => del(`/admin/users/${uid}`),
-    toggleStatus:   (uid)                    => post(`/admin/users/${uid}/toggle-status`),
-    getAnalytics:   ()                       => get("/admin/analytics"),
-    getOutbreaks:   (severity = "severe")    => get(`/admin/disease-outbreaks?severity=${severity}`),
-    getAllReports:   (page = 1)              => get(`/admin/reports?page=${page}`),
+    getUsers: (page = 1, role = "all") => get(`/admin/users?page=${page}&role=${role}`),
+    getUser: (uid) => get(`/admin/users/${uid}`),
+    deleteUser: (uid) => del(`/admin/users/${uid}`),
+    toggleStatus: (uid) => post(`/admin/users/${uid}/toggle-status`),
+    getAnalytics: () => get("/admin/analytics"),
+    getOutbreaks: (severity = "severe") => get(`/admin/disease-outbreaks?severity=${severity}`),
+    getAllReports: (page = 1) => get(`/admin/reports?page=${page}`),
   };
 
   // ── Health Check ────────────────────────────────────────────────────────

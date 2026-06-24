@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     # ── File Upload ───────────────────────────────────────────
     MAX_UPLOAD_SIZE_MB: int = 10
     ALLOWED_IMAGE_EXTENSIONS: str = "jpg,jpeg,png,webp,bmp"
-    UPLOAD_TEMP_DIR: str = "/tmp/agricrop_uploads"
+    UPLOAD_TEMP_DIR: str = "./tmp/agricrop_uploads"
 
     @property
     def allowed_extensions(self) -> List[str]:

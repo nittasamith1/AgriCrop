@@ -76,7 +76,7 @@ app.add_middleware(
 
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*"],  # Tighten in production
+    allowed_hosts=["localhost", "127.0.0.1", "agricrop-a8352.web.app", "agricrop-a8352.firebaseapp.com", "*.onrender.com"],
 )
 
 # ── Static Files Mount ────────────────────────────────────────────────────────

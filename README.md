@@ -1,292 +1,122 @@
-# 🌾 AgriCrop – AI-Powered Geospatial Plant Disease & Soil Moisture Intelligence Platform
+# 🌾 AgriCrop – AI-Powered Precision Agriculture Platform
 
 ## 📖 Overview
 
-AgriCrop is an AI-powered smart agriculture platform designed to assist farmers in monitoring crop health, detecting plant diseases, analyzing soil moisture, and visualizing agricultural data using geospatial technologies.
+AgriCrop is an AI-powered smart agriculture platform designed to assist farmers in monitoring crop health, detecting plant diseases, predicting soil moisture, and visualizing agricultural data using geospatial technologies.
 
-The platform integrates Artificial Intelligence, Firebase Cloud Services, satellite-based mapping, and real-time analytics to provide actionable insights that improve crop productivity while reducing resource wastage.
+The platform integrates Artificial Intelligence (TensorFlow), Firebase Cloud Services, satellite-based mapping (Leaflet), and a FastAPI backend to provide actionable insights that improve crop productivity.
 
 ---
 
 ## ✨ Features
 
-- 🌱 AI-powered Plant Disease Detection
-- 💧 Soil Moisture Monitoring
-- 🛰️ Geospatial Farm Visualization
-- 📍 Interactive Farm Maps
-- 📊 Real-Time Analytics Dashboard
-- ☁️ Firebase Authentication
-- 🔥 Firebase Firestore Database
-- 📂 Firebase Storage
-- 🔐 Secure User Authentication
-- 📱 Responsive UI
-- 📈 Crop Health Reports
-- 🌦 Weather Information Integration
-- 📷 Image Upload & Analysis
-- 👨‍🌾 Farmer Dashboard
-- ⚡ Fast & Modern Interface
+- 🌱 **AI Disease Detection:** MobileNetV2 identifies 38 plant diseases from a single leaf photo.
+- 💧 **Soil Moisture AI:** Dense Neural Network predicts soil moisture based on temperature, humidity, and rainfall.
+- 📍 **GIS Disease Maps:** Interactive Leaflet.js maps with disease markers and heatmaps.
+- 📊 **Real-Time Analytics:** Chart.js powered dashboard for crop health and severity breakdowns.
+- ☁️ **Cloud Infrastructure:** Firebase Authentication, Firestore Database, and Firebase Storage.
+- 🔐 **Role-based Access:** Secure farmer and admin dashboards.
+- 📄 **PDF Reports:** Generate and download professional PDF reports.
 
 ---
 
-# 🛠 Tech Stack
+## 🛠 Tech Stack
 
-## Frontend
+### Frontend
+- **HTML5, CSS3, JavaScript (ES6+)**
+- **Bootstrap 5** (Styling framework)
+- **Chart.js** (Analytics)
+- **Leaflet.js** (Geospatial Mapping)
+- **Firebase Web SDK** (Auth, Storage, Firestore)
 
-- React.js
-- TypeScript
-- Tailwind CSS
-- Vite
-- React Router
-- Framer Motion
+### Backend
+- **Python 3.10+**
+- **FastAPI** (REST API Framework)
+- **Uvicorn** (ASGI server)
+- **Firebase Admin SDK** (Backend security & verification)
 
-## Backend
-
-- Firebase Authentication
-- Cloud Firestore
-- Firebase Storage
-- Firebase Hosting
-- Firebase Functions (Optional)
-
-## AI & ML
-
-- TensorFlow
-- TensorFlow Lite
-- Image Classification
-- Plant Disease Detection Models
-
-## Maps & Geospatial
-
-- Google Maps API / Leaflet
-- Satellite Imagery
-- Geolocation Services
+### AI & ML
+- **TensorFlow & Keras** (Model training and inference)
+- **MobileNetV2** (Image classification)
+- **Scikit-learn** (Data preprocessing)
+- **OpenCV & Pillow** (Image processing)
 
 ---
 
-# 📂 Project Structure
+## 📂 Project Structure
 
 ```text
 AgriCrop/
-│
-├── public/
-├── src/
-│   ├── assets/
-│   ├── components/
-│   ├── pages/
-│   ├── hooks/
-│   ├── services/
-│   ├── firebase/
-│   ├── utils/
-│   ├── contexts/
-│   ├── styles/
-│   └── App.tsx
-│
-├── functions/
-├── firestore.rules
-├── firebase.json
-├── package.json
-├── vite.config.ts
-└── README.md
+├── ai_models/         # Pre-trained TensorFlow models (.h5)
+├── backend/           # FastAPI backend application
+│   ├── routers/       # API endpoints (auth, disease, soil, map)
+│   ├── services/      # Business logic & Firebase integration
+│   ├── config.py      # Environment configuration
+│   └── main.py        # FastAPI entry point
+├── datasets/          # Raw data and labels for AI models
+├── docs/              # Additional documentation
+├── frontend/          # Vanilla HTML/JS/CSS frontend
+│   ├── css/           # Stylesheets (Bootstrap overrides)
+│   ├── js/            # Client-side logic and API wrappers
+│   ├── assets/        # Images, fonts, icons
+│   └── *.html         # Pages (index, login, dashboard, etc.)
+├── logs/              # Backend logs
+├── tests/             # Pytest test suite
+├── .env               # Environment variables
+├── firebase.json      # Firebase Hosting and Rules configuration
+└── requirements.txt   # Python dependencies
 ```
 
 ---
 
-# 🚀 Installation
+## 🚀 Local Development
 
-Clone the repository
+### 1. Backend Setup
 
 ```bash
+# Clone repository
 git clone https://github.com/nittasamith1/AgriCrop.git
-```
-
-Move into the project
-
-```bash
 cd AgriCrop
-```
 
-Install dependencies
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start FastAPI server
+uvicorn backend.main:app --reload --port 8000
+```
+API Documentation will be available at: `http://localhost:8000/api/docs`
+
+### 2. Frontend Setup
+
+The frontend is built with plain HTML/JS and doesn't require a build step. You can use any static server to serve the `frontend/` directory.
+For example, using Python:
 
 ```bash
-npm install
+cd frontend
+python -m http.server 3000
 ```
-
-Start development server
-
-```bash
-npm run dev
-```
+Open `http://localhost:3000` in your browser.
 
 ---
 
-# 🔥 Firebase Setup
+## ☁️ Deployment & Configuration
 
-Create a Firebase Project
+For detailed deployment instructions (Firebase Hosting, Cloud Run/Render) and environment variable setup, please refer to the documentation:
 
-Enable
-
-- Authentication
-- Firestore Database
-- Storage
-- Hosting
-
-Create
-
-```
-.env
-```
-
-Add
-
-```env
-VITE_FIREBASE_API_KEY=YOUR_API_KEY
-VITE_FIREBASE_AUTH_DOMAIN=YOUR_AUTH_DOMAIN
-VITE_FIREBASE_PROJECT_ID=YOUR_PROJECT_ID
-VITE_FIREBASE_STORAGE_BUCKET=YOUR_STORAGE_BUCKET
-VITE_FIREBASE_MESSAGING_SENDER_ID=YOUR_SENDER_ID
-VITE_FIREBASE_APP_ID=YOUR_APP_ID
-```
+- [Deployment Guide](docs/DEPLOYMENT.md)
+- [Environment Variables](docs/ENVIRONMENT.md)
 
 ---
 
-# 📊 Modules
-
-### 🌱 Plant Disease Detection
-
-- Upload crop image
-- AI model predicts disease
-- Confidence score
-- Treatment recommendations
-
----
-
-### 💧 Soil Moisture Monitoring
-
-- Soil moisture visualization
-- Smart irrigation recommendations
-- Historical trends
-
----
-
-### 🛰 Geospatial Dashboard
-
-- Farm boundaries
-- Satellite imagery
-- Crop monitoring
-- Map layers
-
----
-
-### 📈 Analytics Dashboard
-
-- Crop Health
-- Disease Statistics
-- Moisture Trends
-- Productivity Insights
-
----
-
-# 🔒 Authentication
-
-- Email & Password
-- Google Sign-In
-- Secure Firebase Authentication
-- Protected Routes
-
----
-
-
-# 🌍 Future Enhancements
-
-- Drone Image Analysis
-- IoT Sensor Integration
-- Weather Forecast Prediction
-- Crop Yield Prediction
-- Fertilizer Recommendation
-- Pest Detection
-- Voice Assistant
-- Multi-language Support
-- Offline Mode
-- Mobile Application
-
----
-
-# 💻 Available Scripts
-
-```bash
-npm install
-```
-
-```bash
-npm run dev
-```
-
-```bash
-npm run build
-```
-
-```bash
-npm run preview
-```
-
-```bash
-firebase deploy
-```
-
----
-
-# 📈 Performance Goals
-
-- Fast Page Load
-- Responsive Design
-- Secure Authentication
-- Cloud-based Storage
-- Scalable Architecture
-- AI-powered Predictions
-
----
-
-# 🤝 Contributing
-
-Contributions are welcome!
-
-1. Fork the repository
-2. Create a new branch
-
-```bash
-git checkout -b feature-name
-```
-
-3. Commit your changes
-
-```bash
-git commit -m "Added new feature"
-```
-
-4. Push your branch
-
-```bash
-git push origin feature-name
-```
-
-5. Open a Pull Request
-
----
-
-# 👨‍💻 Author
+## 👨‍💻 Author
 
 **Nitta Samith**
-
 - B.Tech Artificial Intelligence & Machine Learning
----
 
 ## ⭐ Support
 
-If you found this project helpful,
-
-⭐ Star the repository
-
-🍴 Fork the repository
-
-🚀 Happy Coding!
-
----
+If you found this project helpful, please ⭐ Star the repository!

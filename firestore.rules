@@ -1,0 +1,143 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper Functions ───────────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidEmail(email) {
+      return email.matches('.*@.*\\..*');
+    }
+
+    // ── Users Collection ───────────────────────────────────────────────────
+    match /users/{userId} {
+      // Authenticated users can read their own profile; admins read all
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+
+      // Only the user themselves (on create) or admin can write
+      allow create: if isAuthenticated() && isOwner(userId)
+        && request.resource.data.keys().hasAll(['uid', 'email', 'name', 'role'])
+        && request.resource.data.role in ['farmer', 'admin'];
+
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin())
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'created_at']);
+
+      allow delete: if isAdmin();
+    }
+
+    // ── Farms Collection ───────────────────────────────────────────────────
+    match /farms/{farmId} {
+      // Owners and admins can read
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+
+      // Only authenticated users can create their own farms
+      allow create: if isAuthenticated()
+        && request.resource.data.user_id == request.auth.uid;
+
+      // Only owners and admins can update/delete
+      allow update: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ── Disease Predictions ────────────────────────────────────────────────
+    match /disease_predictions/{predId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow create: if isAuthenticated()
+        && request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ── Soil Predictions ───────────────────────────────────────────────────
+    match /soil_predictions/{predId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow create: if isAuthenticated()
+        && request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ── General Predictions Collection ─────────────────────────────────────
+    match /predictions/{predId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow create: if isAuthenticated()
+        && request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ── Notifications ──────────────────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      // Backend creates notifications; user can update (mark read) their own
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_read', 'read_at']);
+      allow delete: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ── Reports ────────────────────────────────────────────────────────────
+    match /reports/{reportId} {
+      allow read: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow create: if isAuthenticated()
+        && request.resource.data.user_id == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.user_id == request.auth.uid || isAdmin()
+      );
+    }
+
+    // ── Activity Logs ──────────────────────────────────────────────────────
+    match /activity_logs/{logId} {
+      // Only admins can read activity logs
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Deny all other collections ─────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
