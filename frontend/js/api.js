@@ -13,7 +13,7 @@
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     // If you want local frontend to talk to production backend, you can use the render url here.
     // Otherwise keep it as http://localhost:8000 for full local dev.
-    window.API_BASE = "https://agricrop-backend.onrender.com";
+    window.API_BASE = "https://agricrop-backend-kamu.onrender.com";
   } else {
     // On Vercel (or Firebase), /api/** is rewritten to the backend by vercel.json.
     // An empty string means requests are sent to the same origin, preventing CORS errors.
