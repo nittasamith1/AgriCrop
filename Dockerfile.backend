@@ -36,7 +36,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY backend/ ./backend/
 COPY ai_models/ ./ai_models/
 COPY datasets/ ./datasets/
-COPY serviceAccountKey.json ./serviceAccountKey.json
+# Make this copy optional (succeeds even if file is missing from git)
+COPY serviceAccountKey.jso[n] ./serviceAccountKey.json
 
 # Create all required directories (fixed paths to match config.py settings)
 RUN mkdir -p /app/ai_models/saved_models \
