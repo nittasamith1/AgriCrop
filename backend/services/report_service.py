@@ -1,23 +1,17 @@
 """
-AgriCrop – Report Service
-Generates professional PDF reports for disease predictions, soil moisture,
-and combined analytics using ReportLab.
+AgriCrop – Report Generation Service
+Generates PDF and CSV reports of predictions and analytics.
 """
 
-import io
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, PageBreak,
-)
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from typing import Optional, List, Dict, Any
+from io import BytesIO
 from loguru import logger
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib import colors
 
 from backend.config import settings
 from backend.services.firebase_service import FirestoreService
@@ -25,233 +19,162 @@ from backend.services.storage_service import storage_service
 from backend.utils.helpers import generate_id, utc_now
 
 _report_svc = FirestoreService(settings.COLLECTION_REPORTS)
+_disease_svc = FirestoreService(settings.COLLECTION_DISEASE_PREDICTIONS)
+_soil_svc = FirestoreService(settings.COLLECTION_SOIL_PREDICTIONS)
 
 
 class ReportService:
-    """
-    Generates and stores PDF reports for AgriCrop users.
-    """
-
-    # ── Color Palette ─────────────────────────────────────────────────────────
-    PRIMARY = colors.HexColor("#1a7c3e")
-    SECONDARY = colors.HexColor("#2563eb")
-    ACCENT = colors.HexColor("#f59e0b")
-    LIGHT_BG = colors.HexColor("#f0fdf4")
-    RED = colors.HexColor("#dc2626")
-    GREY = colors.HexColor("#6b7280")
-    WHITE = colors.white
-    BLACK = colors.black
-
-    def _base_styles(self):
-        styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(
-            "AgriTitle",
-            parent=styles["Title"],
-            fontSize=22,
-            textColor=self.PRIMARY,
-            spaceAfter=6,
-            alignment=TA_CENTER,
-        ))
-        styles.add(ParagraphStyle(
-            "SectionHeader",
-            parent=styles["Heading2"],
-            fontSize=13,
-            textColor=self.PRIMARY,
-            spaceBefore=12,
-            spaceAfter=4,
-        ))
-        styles.add(ParagraphStyle(
-            "BodySmall",
-            parent=styles["Normal"],
-            fontSize=9,
-            textColor=self.GREY,
-        ))
-        return styles
-
-    def _draw_header(self, canvas, doc):
-        """Page header with app name and logo placeholder."""
-        canvas.saveState()
-        canvas.setFillColor(self.PRIMARY)
-        canvas.rect(0, A4[1] - 2 * cm, A4[0], 2 * cm, fill=True, stroke=False)
-        canvas.setFillColor(self.WHITE)
-        canvas.setFont("Helvetica-Bold", 16)
-        canvas.drawString(1 * cm, A4[1] - 1.4 * cm, "🌱 AgriCrop Intelligence Network")
-        canvas.setFont("Helvetica", 9)
-        canvas.drawRightString(A4[0] - 1 * cm, A4[1] - 1.4 * cm,
-                               f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC")
-        canvas.restoreState()
-
-    def _draw_footer(self, canvas, doc):
-        """Page footer with page number."""
-        canvas.saveState()
-        canvas.setFillColor(self.GREY)
-        canvas.setFont("Helvetica", 8)
-        canvas.drawString(1 * cm, 0.7 * cm, "AgriCrop – AI Precision Agriculture Platform")
-        canvas.drawRightString(A4[0] - 1 * cm, 0.7 * cm, f"Page {doc.page}")
-        canvas.restoreState()
+    """Generates and manages PDF/CSV reports."""
 
     def generate_disease_report(
         self,
         user_id: str,
-        user_name: str,
-        predictions: List[Dict[str, Any]],
-        report_id: Optional[str] = None,
+        prediction_ids: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Generate a PDF report of disease predictions.
+        """
+        try:
+            report_id = generate_id("report")
+            now = utc_now()
+
+            # Fetch predictions
+            predictions = []
+            for pred_id in prediction_ids:
+                pred = _disease_svc.get(pred_id)
+                if pred:
+                    predictions.append(pred)
+
+            if not predictions:
+                logger.warning(f"No predictions found for report {report_id}")
+                raise ValueError("No predictions found")
+
+            # Generate PDF
+            pdf_bytes = self._create_disease_pdf(predictions, user_id)
+
+            # Upload to storage
+            filename = f"disease_report_{report_id}.pdf"
+            pdf_url = storage_service.upload_report_pdf(pdf_bytes, filename, user_id)
+
+            # Store report metadata
+            report_doc = {
+                "report_id": report_id,
+                "user_id": user_id,
+                "report_type": "disease",
+                "title": "Disease Detection Report",
+                "prediction_ids": prediction_ids,
+                "prediction_count": len(predictions),
+                "pdf_url": pdf_url,
+                "created_at": now,
+            }
+            _report_svc.create(report_id, report_doc)
+
+            logger.info(f"✅ Disease report generated: {report_id}")
+            return report_doc
+
+        except Exception as e:
+            logger.error(f"Failed to generate disease report: {e}")
+            raise
+
+    def _create_disease_pdf(
+        self,
+        predictions: List[Dict],
+        user_id: str,
     ) -> bytes:
         """
-        Generate a disease prediction PDF report.
-        Returns raw PDF bytes.
+        Create a disease prediction PDF document.
         """
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(
-            buffer,
-            pagesize=A4,
-            rightMargin=1.5 * cm,
-            leftMargin=1.5 * cm,
-            topMargin=3 * cm,
-            bottomMargin=2 * cm,
-        )
-        styles = self._base_styles()
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
         story = []
+        styles = getSampleStyleSheet()
 
         # Title
-        story.append(Paragraph("Plant Disease Detection Report", styles["AgriTitle"]))
-        story.append(Spacer(1, 0.3 * cm))
-        story.append(Paragraph(f"Farmer: <b>{user_name}</b> | User ID: {user_id}", styles["BodySmall"]))
-        story.append(HRFlowable(width="100%", thickness=1, color=self.PRIMARY))
-        story.append(Spacer(1, 0.5 * cm))
+        title_style = ParagraphStyle(
+            "CustomTitle",
+            parent=styles["Heading1"],
+            fontSize=24,
+            textColor=colors.HexColor("#2E7D32"),
+            spaceAfter=30,
+            alignment=1,  # Center
+        )
+        story.append(Paragraph("🌾 AgriCrop Disease Report", title_style))
+        story.append(Spacer(1, 0.3 * inch))
 
-        # Summary table
-        story.append(Paragraph("Summary", styles["SectionHeader"]))
-        summary_data = [
-            ["Total Scans", "Diseased", "Healthy", "Severe Cases"],
-            [
-                str(len(predictions)),
-                str(sum(1 for p in predictions if p.get("disease_name", "") != "Healthy")),
-                str(sum(1 for p in predictions if p.get("disease_name", "") == "Healthy")),
-                str(sum(1 for p in predictions if p.get("severity") == "severe")),
-            ]
+        # Report metadata
+        meta_text = f"Generated: {utc_now().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        story.append(Paragraph(meta_text, styles["Normal"]))
+        story.append(Spacer(1, 0.3 * inch))
+
+        # Predictions table
+        table_data = [
+            ["Date", "Disease", "Confidence", "Severity", "Treatment"]
         ]
-        summary_table = Table(summary_data, colWidths=[4 * cm] * 4)
-        summary_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), self.PRIMARY),
-            ("TEXTCOLOR", (0, 0), (-1, 0), self.WHITE),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 10),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("GRID", (0, 0), (-1, -1), 0.5, self.GREY),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [self.LIGHT_BG, self.WHITE]),
-            ("TOPPADDING", (0, 0), (-1, -1), 6),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ]))
-        story.append(summary_table)
-        story.append(Spacer(1, 0.7 * cm))
 
-        # Detailed prediction records
-        story.append(Paragraph("Detailed Prediction Records", styles["SectionHeader"]))
-        pred_data = [["Date", "Disease", "Confidence", "Severity", "Crop"]]
-        for p in predictions:
-            dt = p.get("created_at", "N/A")
-            if hasattr(dt, "strftime"):
-                dt = dt.strftime("%Y-%m-%d %H:%M")
-            pred_data.append([
-                str(dt)[:16],
-                p.get("disease_name", "Unknown"),
-                f"{p.get('confidence', 0) * 100:.1f}%",
-                p.get("severity", "N/A").capitalize(),
-                p.get("crop_type", "N/A"),
+        for pred in predictions:
+            treatments = ", ".join(pred.get("treatments", [])[:1])
+            table_data.append([
+                pred.get("created_at", "N/A")[:10],
+                pred.get("disease_name", "N/A"),
+                f"{pred.get('confidence', 0):.1%}",
+                pred.get("severity", "N/A"),
+                treatments[:30] + "...",
             ])
-        pred_table = Table(pred_data, colWidths=[3.5 * cm, 5 * cm, 3 * cm, 3 * cm, 3 * cm])
-        pred_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), self.SECONDARY),
-            ("TEXTCOLOR", (0, 0), (-1, 0), self.WHITE),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("GRID", (0, 0), (-1, -1), 0.3, self.GREY),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [self.WHITE, self.LIGHT_BG]),
-        ]))
-        story.append(pred_table)
 
-        doc.build(
-            story,
-            onFirstPage=lambda c, d: (self._draw_header(c, d), self._draw_footer(c, d)),
-            onLaterPages=lambda c, d: (self._draw_header(c, d), self._draw_footer(c, d)),
-        )
-        return buffer.getvalue()
-
-    def generate_soil_report(
-        self,
-        user_id: str,
-        user_name: str,
-        predictions: List[Dict[str, Any]],
-    ) -> bytes:
-        """Generate a soil moisture prediction PDF report."""
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(
-            buffer, pagesize=A4,
-            rightMargin=1.5 * cm, leftMargin=1.5 * cm,
-            topMargin=3 * cm, bottomMargin=2 * cm,
-        )
-        styles = self._base_styles()
-        story = []
-
-        story.append(Paragraph("Soil Moisture Prediction Report", styles["AgriTitle"]))
-        story.append(Spacer(1, 0.3 * cm))
-        story.append(Paragraph(f"Farmer: <b>{user_name}</b> | User ID: {user_id}", styles["BodySmall"]))
-        story.append(HRFlowable(width="100%", thickness=1, color=self.PRIMARY))
-        story.append(Spacer(1, 0.5 * cm))
-
-        story.append(Paragraph("Soil Prediction Records", styles["SectionHeader"]))
-        data = [["Date", "Moisture %", "Water Req (mm)", "Irrigation", "Type"]]
-        for p in predictions:
-            dt = p.get("created_at", "N/A")
-            if hasattr(dt, "strftime"):
-                dt = dt.strftime("%Y-%m-%d %H:%M")
-            data.append([
-                str(dt)[:16],
-                f"{p.get('predicted_moisture', 0):.1f}%",
-                f"{p.get('water_requirement_mm', 0):.1f}",
-                "Yes" if p.get("irrigation_recommended") else "No",
-                p.get("irrigation_type", "none").capitalize(),
-            ])
-        table = Table(data, colWidths=[3.5 * cm, 3.5 * cm, 4 * cm, 3 * cm, 4 * cm])
+        table = Table(table_data, colWidths=[1.5*inch, 1.5*inch, 1*inch, 1*inch, 1.5*inch])
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), self.PRIMARY),
-            ("TEXTCOLOR", (0, 0), (-1, 0), self.WHITE),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2E7D32")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("GRID", (0, 0), (-1, -1), 0.3, self.GREY),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [self.WHITE, self.LIGHT_BG]),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
+            ("GRID", (0, 0), (-1, -1), 1, colors.black),
         ]))
         story.append(table)
 
-        doc.build(
-            story,
-            onFirstPage=lambda c, d: (self._draw_header(c, d), self._draw_footer(c, d)),
-            onLaterPages=lambda c, d: (self._draw_header(c, d), self._draw_footer(c, d)),
-        )
+        # Build PDF
+        doc.build(story)
         return buffer.getvalue()
 
-    def save_report_record(
-        self, report_id: str, user_id: str, report_type: str, file_url: str
-    ) -> dict:
-        """Persist report metadata to Firestore."""
-        now = utc_now()
-        doc = {
-            "report_id": report_id,
-            "user_id": user_id,
-            "report_type": report_type,
-            "file_url": file_url,
-            "file_name": f"{report_type}_report_{report_id}.pdf",
-            "created_at": now,
-        }
-        _report_svc.create(report_id, doc)
-        return doc
+    def get_reports(
+        self,
+        user_id: str,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get user reports.
+        """
+        try:
+            reports = _report_svc.query(
+                "user_id", "==", user_id,
+                order_by="created_at",
+                descending=True,
+                limit=limit,
+            )
+            return reports
+        except Exception as e:
+            logger.error(f"Failed to get reports for {user_id}: {e}")
+            return []
 
-    def get_user_reports(self, user_id: str, limit: int = 20) -> List[dict]:
-        return _report_svc.query("user_id", "==", user_id, order_by="created_at", limit=limit)
+    def get_report(
+        self,
+        report_id: str,
+        user_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific report (with user access check).
+        """
+        try:
+            report = _report_svc.get(report_id)
+            if report and report.get("user_id") == user_id:
+                return report
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get report {report_id}: {e}")
+            return None
 
 
-# Module-level singleton
+# Singleton instance
 report_service = ReportService()
