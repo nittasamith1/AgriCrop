@@ -1,135 +1,205 @@
 """
 AgriCrop – Notification Service
-Creates and manages in-app notifications stored in Firestore.
-Supports disease alerts, soil alerts, system messages, and report-ready events.
+Handles user notifications for disease alerts, updates, and system messages.
 """
 
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import datetime
+from typing import Optional, List
 from loguru import logger
 
 from backend.config import settings
 from backend.services.firebase_service import FirestoreService
-from backend.utils.helpers import generate_id, utc_now
+from backend.utils.helpers import generate_id, utc_now, severity_from_confidence
 
-# Firestore collection service for notifications
-_notif_service = FirestoreService(settings.COLLECTION_NOTIFICATIONS)
+_notif_svc = FirestoreService(settings.COLLECTION_NOTIFICATIONS)
 
 
 class NotificationService:
-    """
-    Creates and retrieves push/in-app notifications stored in Firestore.
-    Each notification is a Firestore document under the 'notifications' collection.
-    """
+    """Manages user notifications."""
 
-    def create_notification(
+    def disease_alert(
+        self,
+        user_id: str,
+        disease_name: str,
+        severity: str,
+        prediction_id: str,
+    ) -> str:
+        """
+        Send a disease detection alert notification.
+        """
+        notif_id = generate_id("notif")
+        now = utc_now()
+
+        severity_emoji = {
+            "severe": "🔴",
+            "moderate": "🟠",
+            "mild": "🟡",
+            "healthy": "🌿",
+        }
+
+        notif_doc = {
+            "notification_id": notif_id,
+            "user_id": user_id,
+            "type": "disease_alert",
+            "title": f"{severity_emoji.get(severity, '⚠️')} Disease Detected: {disease_name}",
+            "message": f"Severity: {severity}. View details and treatment options in your history.",
+            "related_prediction_id": prediction_id,
+            "severity": severity,
+            "is_read": False,
+            "created_at": now,
+            "read_at": None,
+        }
+
+        _notif_svc.create(notif_id, notif_doc)
+        logger.info(f"✅ Disease alert sent to {user_id}: {disease_name}")
+        return notif_id
+
+    def soil_alert(
+        self,
+        user_id: str,
+        moisture_percent: float,
+        prediction_id: str,
+    ) -> str:
+        """
+        Send a soil moisture alert notification.
+        """
+        notif_id = generate_id("notif")
+        now = utc_now()
+
+        if moisture_percent < 20:
+            title = "💧 Urgent: Soil Critically Dry"
+            message = "Immediate irrigation needed. Soil moisture is critically low."
+        elif moisture_percent < 40:
+            title = "💧 Warning: Low Soil Moisture"
+            message = "Consider watering your crops soon."
+        else:
+            title = "💧 Soil Moisture Update"
+            message = f"Current soil moisture: {moisture_percent:.1f}%"
+
+        notif_doc = {
+            "notification_id": notif_id,
+            "user_id": user_id,
+            "type": "soil_alert",
+            "title": title,
+            "message": message,
+            "related_prediction_id": prediction_id,
+            "moisture_percent": moisture_percent,
+            "is_read": False,
+            "created_at": now,
+            "read_at": None,
+        }
+
+        _notif_svc.create(notif_id, notif_doc)
+        logger.info(f"✅ Soil alert sent to {user_id}: {moisture_percent:.1f}%")
+        return notif_id
+
+    def system_notification(
         self,
         user_id: str,
         title: str,
         message: str,
-        notif_type: str,
-        related_id: Optional[str] = None,
-    ) -> dict:
+    ) -> str:
         """
-        Create a new notification for a user.
-        notif_type: 'disease_alert' | 'soil_alert' | 'system' | 'report_ready'
+        Send a system notification (welcome, updates, etc.).
         """
         notif_id = generate_id("notif")
-        doc = {
+        now = utc_now()
+
+        notif_doc = {
             "notification_id": notif_id,
             "user_id": user_id,
+            "type": "system",
             "title": title,
             "message": message,
-            "type": notif_type,
             "is_read": False,
-            "related_id": related_id,
-            "created_at": utc_now(),
+            "created_at": now,
+            "read_at": None,
         }
-        _notif_service.create(notif_id, doc)
-        logger.info(f"Notification created for user {user_id}: {title}")
-        return doc
 
-    def disease_alert(self, user_id: str, disease_name: str, severity: str, prediction_id: str) -> dict:
-        """Notify user about a detected plant disease."""
-        severity_emoji = {"healthy": "✅", "mild": "⚠️", "moderate": "🔶", "severe": "🔴"}.get(severity, "⚠️")
-        return self.create_notification(
-            user_id=user_id,
-            title=f"{severity_emoji} Disease Detected: {disease_name}",
-            message=(
-                f"Your crop scan detected {disease_name} with {severity} severity. "
-                "Check the diagnosis report for treatment recommendations."
-            ),
-            notif_type="disease_alert",
-            related_id=prediction_id,
-        )
+        _notif_svc.create(notif_id, notif_doc)
+        logger.info(f"✅ System notification sent to {user_id}: {title}")
+        return notif_id
 
-    def soil_alert(self, user_id: str, moisture: float, irrigation: bool, prediction_id: str) -> dict:
-        """Notify user about soil moisture prediction result."""
-        if irrigation:
-            title = "💧 Irrigation Recommended"
-            message = f"Predicted soil moisture is {moisture:.1f}%. Irrigation is recommended today."
-        else:
-            title = "🌱 Soil Moisture Adequate"
-            message = f"Predicted soil moisture is {moisture:.1f}%. No irrigation needed at this time."
-        return self.create_notification(
-            user_id=user_id,
-            title=title,
-            message=message,
-            notif_type="soil_alert",
-            related_id=prediction_id,
-        )
-
-    def report_ready(self, user_id: str, report_id: str, report_type: str) -> dict:
-        """Notify user that their generated report is ready."""
-        return self.create_notification(
-            user_id=user_id,
-            title="📄 Report Ready",
-            message=f"Your {report_type} report has been generated and is ready to download.",
-            notif_type="report_ready",
-            related_id=report_id,
-        )
-
-    def system_notification(self, user_id: str, title: str, message: str) -> dict:
-        """General system notification."""
-        return self.create_notification(
-            user_id=user_id,
-            title=title,
-            message=message,
-            notif_type="system",
-        )
-
-    def get_user_notifications(
-        self, user_id: str, limit: int = 50, unread_only: bool = False
+    def get_notifications(
+        self,
+        user_id: str,
+        unread_only: bool = False,
+        limit: int = 50,
     ) -> List[dict]:
-        """Fetch notifications for a user, newest first."""
-        docs = _notif_service.query(
-            field="user_id", op="==", value=user_id,
-            order_by="created_at", descending=True, limit=limit,
-        )
-        if unread_only:
-            docs = [d for d in docs if not d.get("is_read", False)]
-        return docs
-
-    def mark_as_read(self, notification_id: str, user_id: str) -> bool:
-        """Mark a single notification as read (verifies ownership)."""
-        doc = _notif_service.get(notification_id)
-        if not doc or doc.get("user_id") != user_id:
-            return False
-        _notif_service.update(notification_id, {"is_read": True})
-        return True
-
-    def mark_all_read(self, user_id: str) -> int:
-        """Mark all unread notifications for a user as read. Returns count updated."""
-        docs = self.get_user_notifications(user_id, unread_only=True)
-        for doc in docs:
-            _notif_service.update(doc["notification_id"], {"is_read": True})
-        return len(docs)
+        """
+        Get user notifications.
+        """
+        try:
+            if unread_only:
+                notifs = _notif_svc.query(
+                    "user_id", "==", user_id,
+                    order_by="created_at",
+                    descending=True,
+                    limit=limit,
+                )
+                notifs = [n for n in notifs if not n.get("is_read")]
+            else:
+                notifs = _notif_svc.query(
+                    "user_id", "==", user_id,
+                    order_by="created_at",
+                    descending=True,
+                    limit=limit,
+                )
+            return notifs
+        except Exception as e:
+            logger.error(f"Failed to get notifications for {user_id}: {e}")
+            return []
 
     def get_unread_count(self, user_id: str) -> int:
-        """Return count of unread notifications for a user."""
-        docs = _notif_service.query(field="user_id", op="==", value=user_id, limit=200)
-        return sum(1 for d in docs if not d.get("is_read", False))
+        """
+        Get count of unread notifications.
+        """
+        try:
+            notifs = _notif_svc.query(
+                "user_id", "==", user_id,
+                limit=1000,
+            )
+            return sum(1 for n in notifs if not n.get("is_read"))
+        except Exception as e:
+            logger.error(f"Failed to get unread count for {user_id}: {e}")
+            return 0
+
+    def mark_as_read(self, notification_id: str) -> bool:
+        """
+        Mark a notification as read.
+        """
+        try:
+            _notif_svc.update(notification_id, {
+                "is_read": True,
+                "read_at": utc_now(),
+            })
+            logger.info(f"✅ Notification marked as read: {notification_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to mark notification as read: {e}")
+            return False
+
+    def mark_all_as_read(self, user_id: str) -> bool:
+        """
+        Mark all user notifications as read.
+        """
+        try:
+            notifs = _notif_svc.query(
+                "user_id", "==", user_id,
+                limit=1000,
+            )
+            for notif in notifs:
+                if not notif.get("is_read"):
+                    _notif_svc.update(notif["id"], {
+                        "is_read": True,
+                        "read_at": utc_now(),
+                    })
+            logger.info(f"✅ All notifications marked as read for {user_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to mark all notifications as read: {e}")
+            return False
 
 
-# Module-level singleton
+# Singleton instance
 notification_service = NotificationService()

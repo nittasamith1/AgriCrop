@@ -1,24 +1,29 @@
-/**
- * AgriCrop – API Client Module
- * Typed wrapper around all backend REST endpoints.
- * Automatically attaches Authorization header using Auth.getToken().
- */
+"""
+AgriCrop – API Client Module
+Typed wrapper around all backend REST endpoints.
+Automatically attaches Authorization header using Auth.getToken().
+"""
 
 // ── API Base URL Configuration ─────────────────────────────────────────────
 // - Local development:  FastAPI runs on localhost:8000
-// - Firebase Hosting:   Use empty string (relative) — firebase.json rewrites /api/** to Cloud Run
-//                       Falls back to direct backend URL if defined
+// - Production (Vercel): /api/** is rewritten to backend by vercel.json
+// - Render: Use environment variable or fallback
 (function () {
   const hostname = window.location.hostname;
+  const protocol = window.location.protocol;
+  
   if (hostname === "localhost" || hostname === "127.0.0.1") {
-    // If you want local frontend to talk to production backend, you can use the render url here.
-    // Otherwise keep it as http://localhost:8000 for full local dev.
-    window.API_BASE = "https://agricrop-backend-kamu.onrender.com";
-  } else {
-    // On Vercel (or Firebase), /api/** is rewritten to the backend by vercel.json.
-    // An empty string means requests are sent to the same origin, preventing CORS errors.
+    // Local development
+    window.API_BASE = "http://localhost:8000";
+  } else if (hostname.includes("vercel") || hostname.includes("vercel.app")) {
+    // Vercel deployment - use relative API (rewritten by vercel.json)
     window.API_BASE = "";
+  } else {
+    // Production - check for backend URL env variable, else use relative
+    window.API_BASE = window.BACKEND_URL || "";
   }
+  
+  console.log("🌾 AgriCrop API Base:", window.API_BASE || "(relative)");
 })();
 
 const AgriCropAPI = (() => {
@@ -41,11 +46,13 @@ const AgriCropAPI = (() => {
     };
 
     try {
-      const res = await fetch(`${BASE()}/api/v1${endpoint}`, config);
+      const url = `${BASE()}/api/v1${endpoint}`;
+      const res = await fetch(url, config);
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         const errMsg = data?.detail || data?.message || `HTTP ${res.status}`;
+        console.error(`[API] ${method} ${endpoint}: ${errMsg}`);
         throw new Error(errMsg);
       }
       return data;
@@ -74,20 +81,16 @@ const AgriCropAPI = (() => {
   // ── Disease Endpoints ───────────────────────────────────────────────────
   const disease = {
     predict: (formData) => postFD("/disease/predict", formData),
-
     getHistory: (page = 1, pageSize = 20) =>
       get(`/disease/history?page=${page}&page_size=${pageSize}`),
-
     getById: (id) => get(`/disease/${id}`),
   };
 
   // ── Soil Endpoints ──────────────────────────────────────────────────────
   const soil = {
     predict: (payload) => post("/soil/predict", payload),
-
     getHistory: (page = 1, pageSize = 20) =>
       get(`/soil/history?page=${page}&page_size=${pageSize}`),
-
     getById: (id) => get(`/soil/${id}`),
   };
 
@@ -108,7 +111,6 @@ const AgriCropAPI = (() => {
   const history = {
     getCombined: (page = 1, pageSize = 20, type = "all") =>
       get(`/history/?page=${page}&page_size=${pageSize}&prediction_type=${type}`),
-
     getDashboard: () => get("/history/dashboard"),
   };
 
@@ -120,14 +122,14 @@ const AgriCropAPI = (() => {
     markAllRead: () => post("/notifications/read-all"),
   };
 
-  // ── Reports ─────────────────────────────────────────────────────────────
+  // ── Reports ──────────────────────────────────────────────────────────
   const reports = {
     generate: (payload) => post("/reports/generate", payload),
     list: () => get("/reports/"),
     getById: (id) => get(`/reports/${id}`),
   };
 
-  // ── Admin ───────────────────────────────────────────────────────────────
+  // ── Admin ───────────────────────────────────────────────────────────
   const admin = {
     getUsers: (page = 1, role = "all") => get(`/admin/users?page=${page}&role=${role}`),
     getUser: (uid) => get(`/admin/users/${uid}`),
@@ -139,7 +141,7 @@ const AgriCropAPI = (() => {
   };
 
   // ── Health Check ────────────────────────────────────────────────────────
-  const health = () => fetch(`${BASE()}/api/health`).then(r => r.json());
+  const health = () => fetch(`${BASE()}/api/health`).then(r => r.json()).catch(e => ({ status: "unhealthy", error: e.message }));
 
   return { auth, disease, soil, map, history, notifications, reports, admin, health, request };
 })();

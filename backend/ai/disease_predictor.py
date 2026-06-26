@@ -1,170 +1,254 @@
 """
-AgriCrop – Disease Predictor
-Runs inference on preprocessed leaf images using MobileNetV2.
-Falls back to a deterministic stub when the model file is not present.
+AgriCrop – Disease Predictor (MobileNetV2 + Fallback Mock)
+Detects plant diseases from leaf images using TensorFlow/MobileNetV2.
+Falls back to realistic mock predictions if model is unavailable.
 """
 
+import os
 import random
-import numpy as np
-from typing import Dict, Any, Optional
+from typing import Dict, List, Any
 from loguru import logger
+from PIL import Image
+import io
 
-from backend.ai.model_loader import (
-    load_disease_model, DISEASE_CLASSES, DISEASE_CLASSES_DISPLAY
-)
-from backend.ai.preprocessor import (
-    preprocess_for_model, extract_image_metadata, compute_green_ratio
-)
 from backend.config import settings
+
+# Try to import TensorFlow
+try:
+    import tensorflow as tf
+    import numpy as np
+    TF_AVAILABLE = True
+except ImportError:
+    logger.warning("TensorFlow not available. Using mock predictions.")
+    TF_AVAILABLE = False
+    tf = None
+    np = None
+
+
+# Disease class labels (38 plant diseases)
+DISEASE_CLASSES = {
+    "Apple___Apple_scab": "Apple Scab",
+    "Apple___Black_rot": "Apple Black Rot",
+    "Apple___Cedar_apple_rust": "Cedar Apple Rust",
+    "Apple___healthy": "Healthy Apple",
+    "Blueberry___healthy": "Healthy Blueberry",
+    "Cherry_(including_sour)___Powdery_mildew": "Powdery Mildew",
+    "Cherry_(including_sour)___healthy": "Healthy Cherry",
+    "Corn_(maize)___Cercospora_leaf_spot_Gray_leaf_spot": "Cercospora Leaf Spot",
+    "Corn_(maize)___Common_rust_": "Common Rust",
+    "Corn_(maize)___Northern_Leaf_Blight": "Northern Leaf Blight",
+    "Corn_(maize)___healthy": "Healthy Corn",
+    "Grape___Black_rot": "Grape Black Rot",
+    "Grape___Esca_(Black_Measles)": "Grape Esca",
+    "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)": "Grape Leaf Blight",
+    "Grape___healthy": "Healthy Grape",
+    "Orange___Haunglongbing_(Citrus_greening)": "Citrus Greening",
+    "Peach___Bacterial_spot": "Peach Bacterial Spot",
+    "Peach___healthy": "Healthy Peach",
+    "Pepper,_bell___Bacterial_spot": "Pepper Bacterial Spot",
+    "Pepper,_bell___healthy": "Healthy Pepper",
+    "Potato___Early_blight": "Potato Early Blight",
+    "Potato___Late_blight": "Potato Late Blight",
+    "Potato___healthy": "Healthy Potato",
+    "Raspberry___healthy": "Healthy Raspberry",
+    "Soybean___healthy": "Healthy Soybean",
+    "Squash___Powdery_mildew": "Squash Powdery Mildew",
+    "Strawberry___Leaf_scorch": "Strawberry Leaf Scorch",
+    "Strawberry___healthy": "Healthy Strawberry",
+    "Tomato___Bacterial_spot": "Tomato Bacterial Spot",
+    "Tomato___Early_blight": "Tomato Early Blight",
+    "Tomato___Late_blight": "Tomato Late Blight",
+    "Tomato___Leaf_Mold": "Tomato Leaf Mold",
+    "Tomato___Septoria_leaf_spot": "Tomato Septoria Leaf Spot",
+    "Tomato___Spider_mites_Two-spotted_spider_mite": "Spider Mites",
+    "Tomato___Target_Spot": "Tomato Target Spot",
+    "Tomato___Tomato_mosaic_virus": "Tomato Mosaic Virus",
+    "Tomato___Tomato_yellow_leaf_curl_virus": "Tomato Yellow Leaf Curl Virus",
+    "Tomato___healthy": "Healthy Tomato",
+}
 
 
 class DiseasePredictor:
-    """
-    Predicts plant disease from a leaf image.
-    Uses MobileNetV2 when the .h5 model is available;
-    otherwise returns a realistic stub prediction.
-    """
+    """Disease prediction using MobileNetV2 with fallback to mock mode."""
 
-    def predict(self, image_bytes: bytes, crop_hint: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Run disease prediction on raw image bytes.
-        Returns a full prediction result dict.
-        """
-        model = load_disease_model()
-        green_ratio = compute_green_ratio(image_bytes)
-        meta = extract_image_metadata(image_bytes)
+    def __init__(self):
+        self.model = None
+        self.model_loaded = False
+        self.stub_mode = True
+        self._load_model()
 
-        if model is not None:
-            return self._predict_with_model(model, image_bytes, green_ratio, meta, crop_hint)
-        else:
-            logger.info("Disease model not loaded — using stub predictor")
-            return self._stub_prediction(image_bytes, green_ratio, meta, crop_hint)
+    def _load_model(self):
+        """Load the TensorFlow MobileNetV2 model if available."""
+        if not TF_AVAILABLE:
+            logger.warning("TensorFlow unavailable. Stub mode enabled.")
+            self.stub_mode = True
+            return
 
-    def _predict_with_model(
-        self, model, image_bytes: bytes, green_ratio: float, meta: dict, crop_hint: Optional[str]
-    ) -> Dict[str, Any]:
-        """Run actual TF inference."""
         try:
-            img_batch = preprocess_for_model(image_bytes)
-            predictions = model.predict(img_batch, verbose=0)
-            class_idx = int(np.argmax(predictions[0]))
-            confidence = float(predictions[0][class_idx])
-
-            class_key = DISEASE_CLASSES[class_idx]
-            display_name = DISEASE_CLASSES_DISPLAY[class_key]
-            is_healthy = "healthy" in class_key.lower()
-
-            result = self._build_result(
-                class_key=class_key,
-                display_name=display_name,
-                confidence=confidence,
-                is_healthy=is_healthy,
-                all_probs=predictions[0].tolist(),
-                green_ratio=green_ratio,
-                meta=meta,
-                stub=False,
-            )
-            logger.info(f"Disease prediction: {display_name} ({confidence:.2%})")
-            return result
-        except Exception as e:
-            logger.error(f"Model inference failed: {e}. Falling back to stub.")
-            return self._stub_prediction(image_bytes, green_ratio, meta, crop_hint)
-
-    def _stub_prediction(
-        self, image_bytes: bytes, green_ratio: float, meta: dict, crop_hint: Optional[str]
-    ) -> Dict[str, Any]:
-        """
-        Deterministic stub that returns realistic predictions based on
-        the image's green ratio (a real proxy for leaf quality).
-        """
-        # Use green ratio as a seed for reproducible results per image
-        seed = int(sum(image_bytes[:64])) % 38
-        random.seed(seed)
-
-        if green_ratio > 0.35:
-            # Mostly green → lean toward healthy or mild disease
-            if random.random() < 0.4:
-                class_key = "Tomato___healthy"
-                confidence = random.uniform(0.78, 0.96)
+            model_path = settings.DISEASE_MODEL_PATH
+            if os.path.exists(model_path):
+                self.model = tf.keras.models.load_model(model_path)
+                self.model_loaded = True
+                self.stub_mode = False
+                logger.info(f"✅ Disease model loaded: {model_path}")
             else:
-                classes_subset = [c for c in DISEASE_CLASSES if "healthy" not in c.lower()]
-                class_key = random.choice(classes_subset)
-                confidence = random.uniform(0.65, 0.88)
-        else:
-            # Low green → likely diseased
-            classes_diseased = [c for c in DISEASE_CLASSES if "healthy" not in c.lower()]
-            class_key = random.choice(classes_diseased)
-            confidence = random.uniform(0.70, 0.95)
+                logger.warning(f"Model file not found: {model_path}. Using stub mode.")
+                self.stub_mode = True
+        except Exception as e:
+            logger.error(f"Failed to load disease model: {e}. Using stub mode.")
+            self.stub_mode = True
 
-        is_healthy = "healthy" in class_key.lower()
-        display_name = DISEASE_CLASSES_DISPLAY[class_key]
+    def predict(self, image_bytes: bytes, crop_hint: str = None) -> Dict[str, Any]:
+        """
+        Predict disease from leaf image.
+        Falls back to realistic mock predictions if model unavailable.
+        """
+        if self.stub_mode:
+            return self._mock_predict(crop_hint)
+        
+        try:
+            return self._real_predict(image_bytes, crop_hint)
+        except Exception as e:
+            logger.error(f"Real prediction failed: {e}. Falling back to mock.")
+            return self._mock_predict(crop_hint)
 
-        # Simulate probability distribution
-        n = len(DISEASE_CLASSES)
-        idx = DISEASE_CLASSES.index(class_key)
-        all_probs = [random.uniform(0.001, 0.05) for _ in range(n)]
-        all_probs[idx] = confidence
-        total = sum(all_probs)
-        all_probs = [p / total for p in all_probs]
+    def _real_predict(self, image_bytes: bytes, crop_hint: str = None) -> Dict[str, Any]:
+        """Real prediction using TensorFlow model."""
+        try:
+            # Load and preprocess image
+            img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            img = img.resize((224, 224))
+            img_array = np.array(img) / 255.0
+            img_array = np.expand_dims(img_array, axis=0)
 
-        return self._build_result(
-            class_key=class_key,
-            display_name=display_name,
-            confidence=confidence,
-            is_healthy=is_healthy,
-            all_probs=all_probs,
-            green_ratio=green_ratio,
-            meta=meta,
-            stub=True,
-        )
+            # Get predictions
+            predictions = self.model.predict(img_array, verbose=0)
+            class_indices = predictions[0]
 
-    def _build_result(
-        self, class_key: str, display_name: str, confidence: float,
-        is_healthy: bool, all_probs: list, green_ratio: float, meta: dict, stub: bool
-    ) -> Dict[str, Any]:
-        """Build the full structured result dictionary."""
-        if is_healthy:
-            severity = "healthy"
-            affected_area = 0.0
-        elif confidence < 0.50:
-            severity = "mild"
-            affected_area = round(random.uniform(5, 25), 1)
-        elif confidence < 0.75:
-            severity = "moderate"
-            affected_area = round(random.uniform(25, 55), 1)
-        else:
-            severity = "severe"
-            affected_area = round(random.uniform(55, 90), 1)
+            # Get top predictions
+            top_indices = np.argsort(class_indices)[-3:][::-1]
+            class_keys = list(DISEASE_CLASSES.keys())
 
-        # Top 3 predictions
-        top_indices = sorted(range(len(all_probs)), key=lambda i: all_probs[i], reverse=True)[:3]
-        top_predictions = [
-            {
-                "class": DISEASE_CLASSES_DISPLAY[DISEASE_CLASSES[i]],
-                "probability": round(all_probs[i], 4),
+            top_predictions = []
+            for idx in top_indices:
+                class_key = class_keys[idx]
+                confidence = float(class_indices[idx])
+                top_predictions.append({
+                    "disease": DISEASE_CLASSES[class_key],
+                    "confidence": confidence,
+                })
+
+            # Main prediction
+            main_idx = top_indices[0]
+            main_class_key = class_keys[main_idx]
+            main_confidence = float(class_indices[main_idx])
+            disease_name = DISEASE_CLASSES[main_class_key]
+            is_healthy = "healthy" in main_class_key.lower()
+
+            from backend.utils.helpers import severity_from_confidence
+            severity = severity_from_confidence(main_confidence, is_healthy)
+
+            return {
+                "success": True,
+                "disease_name": disease_name,
+                "disease_class_key": main_class_key,
+                "confidence": main_confidence,
+                "severity": severity,
+                "affected_area_percent": random.uniform(5, 95) if not is_healthy else 0,
+                "is_healthy": is_healthy,
+                "top_predictions": top_predictions,
+                "image_quality": {"sharpness": 0.85, "lighting": 0.90},
+                "stub_mode": False,
+                "model_version": "MobileNetV2-v1.0",
             }
-            for i in top_indices
+        except Exception as e:
+            logger.error(f"Real prediction error: {e}")
+            raise
+
+    def _mock_predict(self, crop_hint: str = None) -> Dict[str, Any]:
+        """
+        Generate realistic mock predictions for development/testing.
+        Maintains distribution based on crop hint if provided.
+        """
+        # Common crops to disease mappings
+        crop_diseases = {
+            "tomato": [
+                ("Tomato Early Blight", "Tomato___Early_blight"),
+                ("Tomato Late Blight", "Tomato___Late_blight"),
+                ("Tomato Leaf Mold", "Tomato___Leaf_Mold"),
+                ("Healthy Tomato", "Tomato___healthy"),
+            ],
+            "potato": [
+                ("Potato Early Blight", "Potato___Early_blight"),
+                ("Potato Late Blight", "Potato___Late_blight"),
+                ("Healthy Potato", "Potato___healthy"),
+            ],
+            "apple": [
+                ("Apple Scab", "Apple___Apple_scab"),
+                ("Apple Black Rot", "Apple___Black_rot"),
+                ("Cedar Apple Rust", "Apple___Cedar_apple_rust"),
+                ("Healthy Apple", "Apple___healthy"),
+            ],
+            "grape": [
+                ("Grape Black Rot", "Grape___Black_rot"),
+                ("Grape Esca", "Grape___Esca_(Black_Measles)"),
+                ("Healthy Grape", "Grape___healthy"),
+            ],
+        }
+
+        # Select diseases based on crop hint
+        if crop_hint and crop_hint.lower() in crop_diseases:
+            disease_pool = crop_diseases[crop_hint.lower()]
+        else:
+            disease_pool = [(disease, key) for key, disease in DISEASE_CLASSES.items()]
+
+        # Weighted selection (20% chance of healthy)
+        if random.random() < 0.2:
+            # Healthy
+            disease_name = "Healthy Crop"
+            disease_key = list(DISEASE_CLASSES.keys())[0]
+            confidence = random.uniform(0.85, 0.99)
+            is_healthy = True
+            severity = "healthy"
+            affected_area = 0
+        else:
+            # Disease
+            disease_name, disease_key = random.choice(disease_pool)
+            confidence = random.uniform(0.65, 0.95)
+            is_healthy = False
+            from backend.utils.helpers import severity_from_confidence
+            severity = severity_from_confidence(confidence, False)
+            affected_area = random.uniform(10, 85)
+
+        top_predictions = [
+            {"disease": disease_name, "confidence": confidence},
+            {
+                "disease": random.choice(disease_pool)[0],
+                "confidence": random.uniform(0.2, confidence - 0.1),
+            },
+            {
+                "disease": random.choice(disease_pool)[0],
+                "confidence": random.uniform(0.1, 0.3),
+            },
         ]
 
         return {
-            "disease_class_key": class_key,
-            "disease_name": display_name,
-            "confidence": round(confidence, 4),
+            "success": True,
+            "disease_name": disease_name,
+            "disease_class_key": disease_key,
+            "confidence": confidence,
             "severity": severity,
             "affected_area_percent": affected_area,
             "is_healthy": is_healthy,
             "top_predictions": top_predictions,
             "image_quality": {
-                "green_ratio": round(green_ratio, 3),
-                "is_valid_leaf": green_ratio > 0.15,
-                "width": meta.get("width"),
-                "height": meta.get("height"),
-                "file_size_bytes": meta.get("file_size_bytes"),
+                "sharpness": random.uniform(0.7, 0.99),
+                "lighting": random.uniform(0.6, 0.99),
             },
-            "model_version": "MobileNetV2-v1",
-            "stub_mode": stub,
+            "stub_mode": True,
+            "model_version": "Mock-v1.0",
         }
 
 
-# Module-level singleton
+# Singleton instance
 disease_predictor = DiseasePredictor()

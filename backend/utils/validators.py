@@ -1,129 +1,150 @@
 """
-AgriCrop – Input Validators
-Reusable validation functions for file uploads, coordinates,
-soil inputs, and request payloads.
+AgriCrop – Validators
+Request/file validation utilities for API endpoints.
 """
 
-import os
-import re
-from typing import Optional, Tuple
+from typing import List, Tuple, Optional
 from fastapi import UploadFile, HTTPException, status
+from PIL import Image
+import io
 from loguru import logger
 
 from backend.config import settings
 
-# ── Image Upload Validation ────────────────────────────────────────────────────
 
-async def validate_image_upload(file: UploadFile) -> bytes:
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "bmp"}
+MIME_TYPES = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/bmp": "bmp",
+}
+
+
+async def validate_image_upload(
+    file: UploadFile,
+    max_size_mb: Optional[int] = None,
+) -> bytes:
     """
-    Validate an uploaded image file:
-    - Checks MIME type
-    - Checks file extension
-    - Checks file size limit
-    Returns file content bytes if valid.
-    Raises HTTPException on failure.
+    Validate an uploaded image file.
+    Returns the image bytes if valid, raises HTTPException otherwise.
     """
-    if file is None or file.filename is None:
+    if max_size_mb is None:
+        max_size_mb = settings.MAX_UPLOAD_SIZE_MB
+
+    # Check filename
+    if not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No file uploaded.",
+            detail="File must have a name.",
         )
 
-    # Check extension
-    ext = os.path.splitext(file.filename)[-1].lstrip(".").lower()
-    if ext not in settings.allowed_extensions:
+    # Check file extension
+    ext = file.filename.split(".")[-1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"File type '.{ext}' not allowed. Allowed: {', '.join(settings.allowed_extensions)}",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
         )
 
     # Check MIME type
-    allowed_mimes = {
-        "image/jpeg", "image/jpg", "image/png",
-        "image/webp", "image/bmp",
-    }
-    if file.content_type not in allowed_mimes:
+    if file.content_type not in MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Invalid MIME type '{file.content_type}'. Only images are allowed.",
+            detail=f"Unsupported MIME type: {file.content_type}",
         )
 
-    # Read and check size
-    content = await file.read()
-    if len(content) > settings.max_upload_bytes:
+    # Read file content
+    try:
+        content = await file.read()
+    except Exception as e:
+        logger.error(f"Failed to read file: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not read file.",
+        )
+
+    # Check file size
+    max_bytes = max_size_mb * 1024 * 1024
+    if len(content) > max_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size: {settings.MAX_UPLOAD_SIZE_MB} MB.",
+            detail=f"File too large. Maximum size: {max_size_mb}MB.",
         )
 
     if len(content) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file is empty.",
+            detail="File is empty.",
+        )
+
+    # Validate image structure
+    try:
+        img = Image.open(io.BytesIO(content))
+        img.verify()
+        logger.info(f"Image validated: {file.filename} ({img.size})")
+    except Exception as e:
+        logger.error(f"Invalid image file: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or corrupted image file.",
         )
 
     return content
 
 
-# ── Coordinate Validation ──────────────────────────────────────────────────────
-
-def validate_coordinates(lat: float, lon: float) -> Tuple[float, float]:
+def validate_soil_prediction_input(
+    temperature: float,
+    humidity: float,
+    rainfall: float,
+    soil_temperature: Optional[float] = None,
+    wind_speed: Optional[float] = None,
+) -> None:
     """
-    Validate latitude and longitude values.
-    Raises HTTPException if out of range.
+    Validate soil prediction input parameters.
+    Raises HTTPException if invalid.
     """
-    if not (-90 <= lat <= 90):
+    errors = []
+
+    if not -50 <= temperature <= 60:
+        errors.append("Temperature must be between -50°C and 60°C")
+
+    if not 0 <= humidity <= 100:
+        errors.append("Humidity must be between 0% and 100%")
+
+    if not 0 <= rainfall <= 500:
+        errors.append("Rainfall must be between 0mm and 500mm")
+
+    if soil_temperature is not None and not -20 <= soil_temperature <= 70:
+        errors.append("Soil temperature must be between -20°C and 70°C")
+
+    if wind_speed is not None and not 0 <= wind_speed <= 100:
+        errors.append("Wind speed must be between 0 and 100 km/h")
+
+    if errors:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid latitude {lat}. Must be between -90 and 90.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="; ".join(errors),
         )
-    if not (-180 <= lon <= 180):
+
+
+def validate_coordinates(latitude: float, longitude: float) -> None:
+    """Validate geographic coordinates."""
+    if not -90 <= latitude <= 90:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid longitude {lon}. Must be between -180 and 180.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Latitude must be between -90 and 90.",
         )
-    return lat, lon
 
-
-# ── Soil Type Validation ───────────────────────────────────────────────────────
-
-VALID_SOIL_TYPES = {"sandy", "loamy", "clay", "silt", "peaty"}
-
-def validate_soil_type(soil_type: str) -> str:
-    """Validate that soil_type is one of the recognized categories."""
-    normalized = soil_type.strip().lower()
-    if normalized not in VALID_SOIL_TYPES:
+    if not -180 <= longitude <= 180:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid soil_type '{soil_type}'. Must be one of: {', '.join(VALID_SOIL_TYPES)}",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Longitude must be between -180 and 180.",
         )
-    return normalized
 
-
-# ── Pagination Validation ──────────────────────────────────────────────────────
 
 def validate_pagination(page: int, page_size: int) -> Tuple[int, int]:
-    """Ensure page and page_size are within sensible bounds."""
-    if page < 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="'page' must be >= 1.",
-        )
-    if not (1 <= page_size <= 100):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="'page_size' must be between 1 and 100.",
-        )
+    """Validate pagination parameters."""
+    page = max(1, page)
+    page_size = min(100, max(1, page_size))  # Cap at 100
     return page, page_size
-
-
-# ── UID Validation ─────────────────────────────────────────────────────────────
-
-def validate_uid(uid: str) -> str:
-    """Basic Firebase UID format check (28 chars, alphanumeric)."""
-    if not re.match(r"^[a-zA-Z0-9]{20,128}$", uid):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid user ID format.",
-        )
-    return uid

@@ -1,64 +1,34 @@
 """
 AgriCrop – Firebase Storage Service
-Handles image and report uploads/downloads via Firebase Storage.
+Handles image uploads, PDF storage, and file management.
 """
 
 import os
 import uuid
+from datetime import datetime
 from typing import Optional
-from datetime import timedelta, datetime
-
-from firebase_admin import storage as fb_storage
 from loguru import logger
+import firebase_admin.storage as fb_storage
 
 from backend.config import settings
-from backend.utils.helpers import hash_file
+from backend.utils.helpers import utc_now
 
 
 class StorageService:
-    """
-    Thin wrapper around Firebase Cloud Storage for AgriCrop.
-    Handles leaf image uploads, report uploads, and signed URL generation.
-    """
+    """Manages file uploads to Firebase Storage or local fallback."""
 
-    LEAF_IMAGE_PREFIX = "leaf_images/"
-    REPORT_PREFIX = "reports/"
-    PROFILE_PIC_PREFIX = "profile_pictures/"
+    def __init__(self):
+        self.bucket = None
+        self._init_bucket()
 
-    def _get_bucket(self):
-        return fb_storage.bucket()
-
-    def _make_blob_public(self, blob) -> str:
-        """
-        Try to make a blob public. Falls back to a long-lived signed URL
-        if uniform bucket-level access is enabled (which disables make_public).
-        Returns the public URL string.
-        """
-        # Attempt 1: make_public() — works if fine-grained access is enabled
+    def _init_bucket(self):
+        """Initialize Firebase Storage bucket."""
         try:
-            blob.make_public()
-            return blob.public_url
+            self.bucket = fb_storage.bucket(settings.FIREBASE_STORAGE_BUCKET)
+            logger.info(f"✅ Storage bucket initialized: {settings.FIREBASE_STORAGE_BUCKET}")
         except Exception as e:
-            logger.warning(f"make_public() failed (uniform bucket-level access?): {e}")
-
-        # Attempt 2: Generate a long-lived signed URL (7 days)
-        try:
-            url = blob.generate_signed_url(
-                expiration=timedelta(days=7),
-                method="GET",
-                version="v4",
-            )
-            logger.info(f"Using signed URL instead of public URL for blob: {blob.name}")
-            return url
-        except Exception as e2:
-            logger.warning(f"Signed URL generation failed: {e2}")
-
-        # Attempt 3: Return the constructed public storage URL as fallback
-        # This works if the storage bucket rules allow public reads
-        bucket_name = blob.bucket.name
-        public_url = f"https://storage.googleapis.com/{bucket_name}/{blob.name}"
-        logger.info(f"Using constructed storage URL: {public_url}")
-        return public_url
+            logger.warning(f"Storage bucket initialization failed: {e}. Using local fallback.")
+            self.bucket = None
 
     def upload_leaf_image(
         self,
@@ -68,98 +38,94 @@ class StorageService:
         content_type: str = "image/jpeg",
     ) -> str:
         """
-        Upload a leaf image to Firebase Storage.
-        Returns the public download URL.
+        Upload a leaf image to Firebase Storage or local storage.
+        Returns the URL.
         """
-        ext = os.path.splitext(filename)[-1].lower() or ".jpg"
-        unique_name = f"{self.LEAF_IMAGE_PREFIX}{user_id}/{uuid.uuid4().hex}{ext}"
-
         try:
-            bucket = self._get_bucket()
-            blob = bucket.blob(unique_name)
-            blob.upload_from_string(content, content_type=content_type)
-            url = self._make_blob_public(blob)
-            logger.info(f"Uploaded leaf image: {unique_name}")
-            return url
+            # Generate unique filename
+            ext = filename.split(".")[-1].lower()
+            unique_name = f"{user_id}/leaves/{uuid.uuid4().hex}.{ext}"
+
+            if self.bucket:
+                # Upload to Firebase Storage
+                blob = self.bucket.blob(unique_name)
+                blob.upload_from_string(content, content_type=content_type)
+                blob.make_public()
+                url = blob.public_url
+                logger.info(f"✅ Leaf image uploaded: {unique_name}")
+                return url
+            else:
+                # Fallback to local storage
+                return self._save_locally(content, unique_name)
+
         except Exception as e:
-            logger.error(f"Leaf image upload failed: {e}")
-            # Return a mock local URL so the prediction can still complete
-            return f"{settings.UPLOAD_TEMP_DIR}/{unique_name.replace('/', '_')}"
+            logger.error(f"Image upload failed: {e}")
+            raise
 
     def upload_report_pdf(
         self,
         content: bytes,
-        report_id: str,
+        filename: str,
         user_id: str,
     ) -> str:
         """
-        Upload a generated PDF report to Firebase Storage.
-        Returns a signed URL valid for 7 days.
+        Upload a PDF report to Firebase Storage or local storage.
+        Returns the URL.
         """
-        blob_name = f"{self.REPORT_PREFIX}{user_id}/{report_id}.pdf"
         try:
-            bucket = self._get_bucket()
-            blob = bucket.blob(blob_name)
-            blob.upload_from_string(content, content_type="application/pdf")
+            unique_name = f"{user_id}/reports/{uuid.uuid4().hex}_{filename}"
 
-            url = blob.generate_signed_url(
-                expiration=timedelta(days=7),
-                method="GET",
-                version="v4",
-            )
-            logger.info(f"Uploaded report PDF: {blob_name}")
+            if self.bucket:
+                blob = self.bucket.blob(unique_name)
+                blob.upload_from_string(content, content_type="application/pdf")
+                url = blob.public_url
+                logger.info(f"✅ PDF report uploaded: {unique_name}")
+                return url
+            else:
+                return self._save_locally(content, unique_name)
+
+        except Exception as e:
+            logger.error(f"PDF upload failed: {e}")
+            raise
+
+    def _save_locally(self, content: bytes, path: str) -> str:
+        """
+        Save file to local storage (fallback).
+        """
+        try:
+            local_path = os.path.join(settings.UPLOAD_TEMP_DIR, path)
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            
+            with open(local_path, "wb") as f:
+                f.write(content)
+            
+            # Return URL pointing to static endpoint
+            url = f"{os.environ.get('API_BASE', 'http://localhost:8000')}/static/uploads/{path}"
+            logger.info(f"✅ File saved locally: {local_path}")
             return url
         except Exception as e:
-            logger.error(f"Report PDF upload failed: {e}")
-            return ""
+            logger.error(f"Local file save failed: {e}")
+            raise
 
-    def upload_profile_picture(
-        self,
-        content: bytes,
-        user_id: str,
-        content_type: str = "image/jpeg",
-    ) -> str:
-        """Upload a user profile picture and return its public URL."""
-        ext = ".jpg" if "jpeg" in content_type else ".png"
-        blob_name = f"{self.PROFILE_PIC_PREFIX}{user_id}/avatar{ext}"
+    def delete_file(self, path: str) -> bool:
+        """
+        Delete a file from storage.
+        """
         try:
-            bucket = self._get_bucket()
-            blob = bucket.blob(blob_name)
-            blob.upload_from_string(content, content_type=content_type)
-            url = self._make_blob_public(blob)
-            logger.info(f"Uploaded profile picture: {blob_name}")
-            return url
-        except Exception as e:
-            logger.error(f"Profile picture upload failed: {e}")
-            return ""
-
-    def delete_file(self, blob_name: str) -> bool:
-        """Delete a file from Firebase Storage by its blob path."""
-        try:
-            bucket = self._get_bucket()
-            blob = bucket.blob(blob_name)
-            blob.delete()
-            logger.info(f"Deleted storage blob: {blob_name}")
+            if self.bucket:
+                blob = self.bucket.blob(path)
+                blob.delete()
+                logger.info(f"✅ File deleted: {path}")
+            else:
+                local_path = os.path.join(settings.UPLOAD_TEMP_DIR, path)
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                    logger.info(f"✅ Local file deleted: {local_path}")
             return True
         except Exception as e:
-            logger.error(f"Failed to delete blob '{blob_name}': {e}")
+            logger.error(f"File deletion failed: {e}")
             return False
 
-    def get_signed_url(self, blob_name: str, expiry_hours: int = 1) -> Optional[str]:
-        """Generate a time-limited signed URL for a private blob."""
-        try:
-            bucket = self._get_bucket()
-            blob = bucket.blob(blob_name)
-            url = blob.generate_signed_url(
-                expiration=timedelta(hours=expiry_hours),
-                method="GET",
-                version="v4",
-            )
-            return url
-        except Exception as e:
-            logger.error(f"Signed URL generation failed for '{blob_name}': {e}")
-            return None
 
-
-# Module-level singleton
+# Singleton instance
 storage_service = StorageService()
