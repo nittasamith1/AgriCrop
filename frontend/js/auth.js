@@ -62,12 +62,22 @@ const Auth = (() => {
 
       // Save to backend (Firestore via FastAPI)
       const token = await fbUser.getIdToken();
-      await fetch(`${window.API_BASE}/api/v1/auth/register`, {
+      const res = await fetch(`${window.API_BASE}/api/v1/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ email, password, name, role, phone }),
       });
 
+      let userProfile = { uid: fbUser.uid, email, name, role };
+      if (res.ok) {
+        // Fetch full profile to be sure
+        const profileRes = await fetch(`${window.API_BASE}/api/v1/auth/me`, {
+          headers: { "Authorization": `Bearer ${token}` },
+        });
+        if (profileRes.ok) userProfile = await profileRes.json();
+      }
+
+      setSession(token, userProfile);
       return { success: true, message: "Account created! Please verify your email." };
     } catch (err) {
       return { success: false, message: mapFirebaseError(err) };
@@ -80,6 +90,9 @@ const Auth = (() => {
       const cred = await auth().signInWithEmailAndPassword(email, password);
       const fbUser = cred.user;
       const token = await fbUser.getIdToken();
+
+      // Store token immediately so subsequent requests have it
+      sessionStorage.setItem(TOKEN_KEY, token);
 
       // Fetch full profile from backend
       const res = await fetch(`${window.API_BASE}/api/v1/auth/me`, {

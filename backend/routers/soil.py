@@ -71,13 +71,10 @@ async def predict_soil(
             })
 
     # ── Build recommendation text ─────────────────────────────────────────────
-    recommendation_text = get_irrigation_recommendation(
-        predicted_moisture=result["predicted_moisture"],
-        irrigation_recommended=result["irrigation_recommended"],
-        irrigation_type=result["irrigation_type"],
-        soil_type=result["soil_type"],
-        water_req_mm=result["water_requirement_mm"],
+    recommendation = get_irrigation_recommendation(
+        predicted_moisture=result["predicted_moisture"]
     )
+    recommendation_text = recommendation["message"]
 
     # ── Save to Firestore ─────────────────────────────────────────────────────
     prediction_id = generate_id("spred")
@@ -115,8 +112,7 @@ async def predict_soil(
     # ── Notification ──────────────────────────────────────────────────────────
     notification_service.soil_alert(
         user_id=uid,
-        moisture=result["predicted_moisture"],
-        irrigation=result["irrigation_recommended"],
+        moisture_percent=result["predicted_moisture"],
         prediction_id=prediction_id,
     )
 

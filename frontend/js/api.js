@@ -1,26 +1,21 @@
-"""
-AgriCrop – API Client Module
-Typed wrapper around all backend REST endpoints.
-Automatically attaches Authorization header using Auth.getToken().
-"""
+/**
+ * AgriCrop – API Client Module
+ * Typed wrapper around all backend REST endpoints.
+ * Automatically attaches Authorization header using Auth.getToken().
+ */
 
 // ── API Base URL Configuration ─────────────────────────────────────────────
 // - Local development:  FastAPI runs on localhost:8000
-// - Production (Vercel): /api/** is rewritten to backend by vercel.json
-// - Render: Use environment variable or fallback
+// - Production (Firebase): /api/** is proxied to Cloud Functions or Cloud Run
 (function () {
   const hostname = window.location.hostname;
-  const protocol = window.location.protocol;
   
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     // Local development
     window.API_BASE = "http://localhost:8000";
-  } else if (hostname.includes("vercel") || hostname.includes("vercel.app")) {
-    // Vercel deployment - use relative API (rewritten by vercel.json)
-    window.API_BASE = "";
   } else {
-    // Production - check for backend URL env variable, else use relative
-    window.API_BASE = window.BACKEND_URL || "";
+    // Production - relative path for Firebase Hosting
+    window.API_BASE = "";
   }
   
   console.log("🌾 AgriCrop API Base:", window.API_BASE || "(relative)");
