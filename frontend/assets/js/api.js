@@ -11,7 +11,7 @@
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     window.API_BASE = "http://localhost:8000";
   } else if (hostname.includes("vercel") || hostname.includes("vercel.app")) {
-    window.API_BASE = "";
+    window.API_BASE = "https://agricrop-backend-kamu.onrender.com";
   } else {
     window.API_BASE = window.BACKEND_URL || "";
   }
