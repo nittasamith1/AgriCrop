@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Disease Map – AgriCrop</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
+  <link href="../assets/css/main.css" rel="stylesheet"/><link href="../assets/css/dark-mode.css" rel="stylesheet"/><link href="../assets/css/animations.css" rel="stylesheet"/>
+  <style>
+    #ag-map { height: calc(100vh - 200px); min-height: 500px; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+    .map-toolbar { display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; padding:1rem 1.25rem; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg) var(--radius-lg) 0 0; }
+    .map-legend { display:flex; flex-wrap:wrap; gap:0.75rem; align-items:center; }
+    .legend-dot { width:12px; height:12px; border-radius:50%; display:inline-block; margin-right:4px; }
+    .map-stat { padding:0.4rem 0.85rem; background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-md); font-size:0.78rem; font-weight:600; }
+    .filter-chip { padding:0.35rem 0.85rem; border-radius:var(--radius-full); border:1px solid var(--border); font-size:0.78rem; cursor:pointer; transition:all 0.15s; background:var(--bg-card); color:var(--text-secondary); }
+    .filter-chip.active { border-color:var(--primary); background:var(--primary-glow); color:var(--primary-light); }
+  </style>
+</head>
+<body>
+<nav class="ag-navbar"><div class="d-flex align-items-center gap-3 w-100" style="padding:0 1.5rem;">
+  <button class="d-lg-none btn-ag-icon" id="sidebar-toggle">☰</button>
+  <a href="/" class="brand">🌱 AgriCrop</a>
+  <div class="ms-auto d-flex gap-2 align-items-center">
+    <button id="theme-toggle"><span class="toggle-icon sun-icon">☀️</span><span class="toggle-icon moon-icon">🌙</span></button>
+    <a href="dashboard.html" class="btn-ag-secondary" style="font-size:0.82rem;padding:0.45rem 1rem;">← Dashboard</a>
+  </div>
+</div></nav>
+
+<aside class="ag-sidebar" id="sidebar">
+  <a href="dashboard.html" class="sidebar-link"><span class="link-icon">🏠</span> Dashboard</a>
+  <a href="upload.html" class="sidebar-link"><span class="link-icon">🌿</span> Upload Leaf</a>
+  <a href="soil-prediction.html" class="sidebar-link"><span class="link-icon">💧</span> Soil Prediction</a>
+  <a href="map.html" class="sidebar-link active"><span class="link-icon">🗺️</span> Disease Map</a>
+  <a href="history.html" class="sidebar-link"><span class="link-icon">📋</span> History</a>
+  <a href="profile.html" class="sidebar-link"><span class="link-icon">👤</span> Profile</a>
+</aside>
+
+<main class="ag-content-area ag-page">
+  <div class="section-header mb-3">
+    <div>
+      <h2 class="section-title">🗺️ GIS Disease Intelligence Map</h2>
+      <p class="section-subtitle">Real-time disease hotspots and farm locations across India</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button id="refresh-map-btn" class="btn-ag-secondary" style="font-size:0.82rem;">🔄 Refresh</button>
+      <button id="my-location-btn" class="btn-ag-primary" style="font-size:0.82rem;">📍 My Location</button>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    <div class="map-stat">📍 <span id="total-markers">0</span> Farms</div>
+    <div class="map-stat">🔴 <span id="severe-count">0</span> Severe</div>
+    <div class="map-stat">🟠 <span id="moderate-count">0</span> Moderate</div>
+    <div class="map-stat">🟡 <span id="mild-count">0</span> Mild</div>
+    <div class="map-stat">🟢 <span id="healthy-count">0</span> Healthy</div>
+  </div>
+
+  <!-- Map Toolbar + Map -->
+  <div class="ag-map-container">
+    <div class="map-toolbar">
+      <!-- Layer Toggle -->
+      <div class="d-flex gap-1 me-3">
+        <div class="filter-chip active" data-layer="markers" onclick="toggleLayer(this,'markers')">📍 Markers</div>
+        <div class="filter-chip" data-layer="heatmap" onclick="toggleLayer(this,'heatmap')">🌡️ Heatmap</div>
+        <div class="filter-chip" data-layer="hotspots" onclick="toggleLayer(this,'hotspots')">🔥 Hotspots</div>
+        <div class="filter-chip" data-layer="my-farms" onclick="toggleLayer(this,'my-farms')">🌾 My Farms</div>
+      </div>
+
+      <!-- Severity Filter -->
+      <div class="d-flex gap-1 me-3">
+        <div class="filter-chip active" data-severity="all" onclick="filterSeverity(this)">All</div>
+        <div class="filter-chip" data-severity="severe" onclick="filterSeverity(this)" style="border-color:rgba(220,38,38,0.4);">Severe</div>
+        <div class="filter-chip" data-severity="moderate" onclick="filterSeverity(this)" style="border-color:rgba(249,115,22,0.4);">Moderate</div>
+        <div class="filter-chip" data-severity="mild" onclick="filterSeverity(this)">Mild</div>
+        <div class="filter-chip" data-severity="healthy" onclick="filterSeverity(this)">Healthy</div>
+      </div>
+
+      <!-- Legend -->
+      <div class="map-legend ms-auto d-none d-md-flex">
+        <span><span class="legend-dot" style="background:#dc2626;"></span>Severe</span>
+        <span><span class="legend-dot" style="background:#f97316;"></span>Moderate</span>
+        <span><span class="legend-dot" style="background:#f59e0b;"></span>Mild</span>
+        <span><span class="legend-dot" style="background:#16a34a;"></span>Healthy</span>
+        <span><span class="legend-dot" style="background:#64748b;"></span>Unknown</span>
+      </div>
+    </div>
+    <div id="ag-map"></div>
+  </div>
+</main>
+
+<div id="ag-toast-container" class="ag-toast-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+<<<<<<< HEAD:frontend/map.html
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="js/utils.js"></script><script src="js/firebase-config.js"></script><script src="js/api.js"></script>
+<script src="js/auth.js"></script><script src="js/map.js"></script>
+=======
+
+
+<script src="../assets/js/utils.js"></script><script src="../assets/js/auth-config.js"></script><script src="../assets/js/api.js"></script>
+<script src="../assets/js/auth.js"></script><script src="../assets/js/map.js"></script>
+>>>>>>> abb845e (new update commit):frontend/pages/map.html
+<script>
+let allMarkers = [];
+let currentLayer = "markers";
+let currentSeverityFilter = "all";
+
+document.addEventListener("DOMContentLoaded", () => {
+  Auth.requireAuth();
+  AgriMap.init("ag-map");
+  AgriMap.addLocationSearch();
+  loadMapData();
+
+  document.getElementById("refresh-map-btn")?.addEventListener("click", loadMapData);
+  document.getElementById("my-location-btn")?.addEventListener("click", () => {
+    if (!navigator.geolocation) return Utils.showToast("Geolocation not supported.", "warning");
+    navigator.geolocation.getCurrentPosition(pos => {
+      AgriMap.getMap().setView([pos.coords.latitude, pos.coords.longitude], 13);
+      Utils.showToast("Moved to your location!", "success");
+    });
+  });
+
+  document.getElementById("sidebar-toggle")?.addEventListener("click", () => {
+    document.getElementById("sidebar")?.classList.toggle("open");
+  });
+});
+
+async function loadMapData() {
+  Utils.showLoading("Loading map data...");
+  try {
+    const data = await AgriCropAPI.map.getMarkers({});
+    allMarkers = data.markers || [];
+    Utils.hideLoading();
+    renderMarkers(allMarkers);
+    updateStats(allMarkers);
+  } catch (e) {
+    Utils.hideLoading();
+    Utils.showToast("Failed to load map data.", "error");
+  }
+}
+
+function renderMarkers(markers) {
+  const filtered = currentSeverityFilter === "all"
+    ? markers
+    : markers.filter(m => m.last_severity === currentSeverityFilter || m.marker_color === currentSeverityFilter);
+  AgriMap.addMarkers(filtered);
+  if (filtered.length) setTimeout(() => AgriMap.fitToMarkers(), 300);
+  document.getElementById("total-markers").textContent = filtered.length;
+}
+
+function updateStats(markers) {
+  const sev = { severe:0, moderate:0, mild:0, healthy:0 };
+  markers.forEach(m => { const s = m.last_severity; if (s in sev) sev[s]++; });
+  Object.entries(sev).forEach(([k,v]) => {
+    const el = document.getElementById(`${k}-count`);
+    if (el) el.textContent = v;
+  });
+}
+
+function toggleLayer(el, layer) {
+  document.querySelectorAll("[data-layer]").forEach(b => b.classList.remove("active"));
+  el.classList.add("active");
+  currentLayer = layer;
+
+  AgriMap.clearMarkers();
+  AgriMap.removeHeatmap();
+
+  if (layer === "markers") {
+    renderMarkers(allMarkers);
+  } else if (layer === "heatmap") {
+    AgriCropAPI.map.getHeatmap().then(data => AgriMap.addHeatmap(data.points || []));
+  } else if (layer === "hotspots") {
+    AgriCropAPI.map.getDiseaseHotspots().then(data => {
+      AgriMap.addMarkers((data.hotspots || []).map(h => ({...h, marker_color: "red", name: h.disease_name, last_severity: h.severity})));
+      if ((data.hotspots||[]).length) setTimeout(AgriMap.fitToMarkers, 300);
+    });
+  } else if (layer === "my-farms") {
+    AgriCropAPI.map.getMyFarms().then(data => {
+      AgriMap.addMarkers(data.markers || []);
+      if ((data.markers||[]).length) setTimeout(AgriMap.fitToMarkers, 300);
+    });
+  }
+}
+
+function filterSeverity(el) {
+  document.querySelectorAll("[data-severity]").forEach(b => b.classList.remove("active"));
+  el.classList.add("active");
+  currentSeverityFilter = el.dataset.severity;
+  renderMarkers(allMarkers);
+}
+</script>
+</body>
+</html>

@@ -1,103 +1,111 @@
 """
 AgriCrop – Shared FastAPI Dependencies
 Provides reusable dependency-injected services:
-  - Firebase auth token verification
-  - Current user retrieval
+  - JWT token verification and decoding
+  - Current user retrieval (MongoDB)
   - Admin role guard
-  - Database client
+  - Database client connection
 """
 
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import firebase_admin.auth as firebase_auth
 from loguru import logger
 
 from backend.config import settings
-from backend.services.firebase_service import get_firestore_client
+from backend.database import get_database
+from backend.services.auth_service import AuthService
+from backend.services.mongodb_service import MongoDBService
 
-# ── HTTP Bearer Scheme ────────────────────────────────────────────────────────
-bearer_scheme = HTTPBearer(auto_error=False)
+from fastapi.security import APIKeyHeader
+import re
 
+# APIKeyHeader security scheme (shows Authorize button in Swagger where user enters "Bearer <token>")
+api_key_scheme = APIKeyHeader(name="Authorization", auto_error=False)
 
-# ── Token Verification ────────────────────────────────────────────────────────
-async def verify_firebase_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+# MongoDB users helper
+_user_svc = MongoDBService(settings.COLLECTION_USERS, id_field="uid")
+
+async def verify_jwt_token(
+    auth_header: Optional[str] = Depends(api_key_scheme),
 ) -> dict:
     """
-    Verify a Firebase ID token from the Authorization header.
-    Returns the decoded token payload (uid, email, role, etc.).
-    Raises 401 if missing or invalid.
+    Verify and decode a JWT Access Token from the Authorization header.
+    Supports standard Bearer prefix, duplicate Bearer (Swagger), quotes, and raw tokens.
+    Returns the decoded token payload.
     """
-    if credentials is None:
+    if not auth_header:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization header missing. Please include 'Bearer <token>'.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token = credentials.credentials
-    try:
-        decoded = firebase_auth.verify_id_token(token, check_revoked=True)
-        return decoded
-    except firebase_auth.RevokedIdTokenError:
+    # 1. Clean whitespace
+    token = auth_header.strip()
+
+    # 2. Handle double Bearer if user typed "Bearer <token>" in Swagger's Bearer input
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+
+    # 3. Clean quotes if wrapped (e.g. stringified JSON or double-quotes from frontend storage)
+    token = token.strip('"').strip("'")
+
+    # 4. Handle JSON-like formats e.g. {"access_token": "..."} or "access_token": "..."
+    if "access_token" in token:
+        match = re.search(r'"access_token"\s*:\s*"([^"]+)"', token)
+        if match:
+            token = match.group(1)
+
+    # 5. Verify the token type and payload
+    payload = AuthService.verify_token(token, expected_type="access")
+    
+    if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has been revoked. Please log in again.",
+            detail="Invalid or expired access token. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    except firebase_auth.ExpiredIdTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired. Please log in again.",
-        )
-    except firebase_auth.InvalidIdTokenError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}",
-        )
-    except Exception as e:
-        logger.error(f"Token verification error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not verify authentication token.",
-        )
+        
+    return payload
 
 
 async def get_current_user(
-    token_data: dict = Depends(verify_firebase_token),
+    token_data: dict = Depends(verify_jwt_token),
 ) -> dict:
     """
-    Returns the verified token payload enriched with Firestore user profile.
-    Exposes: uid, email, name, role, farm_ids, etc.
+    Returns the verified token payload enriched with the MongoDB user profile.
+    Exposes: uid, email, name, role, farm_ids, is_active, etc.
     """
     uid = token_data.get("uid")
     if not uid:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="UID not found in token.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="UID not found in authentication token."
+        )
 
-    db = get_firestore_client()
-    user_ref = db.collection(settings.COLLECTION_USERS).document(uid)
-    user_doc = user_ref.get()
+    user_data = await _user_svc.get(uid)
+    if not user_data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account not found."
+        )
 
-    if not user_doc.exists:
-        # Return token data only (user not yet saved to Firestore)
-        return {
-            "uid": uid,
-            "email": token_data.get("email", ""),
-            "name": token_data.get("name", ""),
-            "role": "farmer",
-            "is_new": True,
-        }
+    if not user_data.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account has been deactivated."
+        )
 
-    user_data = user_doc.to_dict()
-    user_data["uid"] = uid
     return user_data
-
 
 async def require_admin(
     current_user: dict = Depends(get_current_user),
 ) -> dict:
     """
-    Guards admin-only routes. Raises 403 if the user is not an admin.
+    Guards admin-only routes. Raises 403 Forbidden if user is not an admin.
     """
     if current_user.get("role") != "admin":
         raise HTTPException(
@@ -106,7 +114,6 @@ async def require_admin(
         )
     return current_user
 
-
 def get_db():
-    """Dependency that yields a Firestore client."""
-    return get_firestore_client()
+    """Dependency yielding the active MongoDB database client instance."""
+    return get_database()

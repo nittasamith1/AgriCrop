@@ -15,16 +15,16 @@ from backend.dependencies import get_current_user
 from backend.ai.soil_predictor import soil_predictor
 from backend.ai.recommendation_engine import get_irrigation_recommendation
 from backend.models.prediction import SoilPredictionRequest
-from backend.services.firebase_service import FirestoreService
+from backend.services.mongodb_service import MongoDBService
 from backend.services.notification_service import notification_service
 from backend.utils.helpers import generate_id, utc_now
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
-_soil_svc = FirestoreService(settings.COLLECTION_SOIL_PREDICTIONS)
-_user_svc = FirestoreService(settings.COLLECTION_USERS)
-_farm_svc = FirestoreService(settings.COLLECTION_FARMS)
+_soil_svc = MongoDBService(settings.COLLECTION_SOIL_PREDICTIONS, id_field="prediction_id")
+_user_svc = MongoDBService(settings.COLLECTION_USERS, id_field="uid")
+_farm_svc = MongoDBService(settings.COLLECTION_FARMS, id_field="farm_id")
 
 
 @router.post("/predict", status_code=status.HTTP_201_CREATED)
@@ -58,25 +58,32 @@ async def predict_soil(
     # ── Get farm location ─────────────────────────────────────────────────────
     farm_lat, farm_lon, district, state = payload.latitude, payload.longitude, None, None
     if payload.farm_id:
-        farm_doc = _farm_svc.get(payload.farm_id)
+        farm_doc = await _farm_svc.get(payload.farm_id)
         if farm_doc and farm_doc.get("user_id") == uid:
             farm_lat = farm_lat or farm_doc.get("latitude")
             farm_lon = farm_lon or farm_doc.get("longitude")
             district = farm_doc.get("district")
             state = farm_doc.get("state")
             # Update farm's last known moisture
-            _farm_svc.update(payload.farm_id, {
+            await _farm_svc.update(payload.farm_id, {
                 "last_moisture": result["predicted_moisture"],
                 "updated_at": utc_now(),
             })
 
     # ── Build recommendation text ─────────────────────────────────────────────
+<<<<<<< HEAD
     recommendation = get_irrigation_recommendation(
         predicted_moisture=result["predicted_moisture"]
     )
     recommendation_text = recommendation["message"]
+=======
+    rec_data = get_irrigation_recommendation(
+        predicted_moisture=result["predicted_moisture"]
+    )
+    recommendation_text = rec_data["message"]
+>>>>>>> abb845e (new update commit)
 
-    # ── Save to Firestore ─────────────────────────────────────────────────────
+    # ── Save to MongoDB ───────────────────────────────────────────────────────
     prediction_id = generate_id("spred")
     now = utc_now()
 
@@ -103,14 +110,24 @@ async def predict_soil(
         "created_at": now,
     }
 
-    _soil_svc.create(prediction_id, prediction_doc)
+    await _soil_svc.create(prediction_id, prediction_doc)
 
     # Increment total_predictions
     total = current_user.get("total_predictions", 0) + 1
-    _user_svc.update(uid, {"total_predictions": total, "updated_at": now})
+    await _user_svc.update(uid, {"total_predictions": total, "updated_at": now})
 
-    # ── Notification ──────────────────────────────────────────────────────────
-    notification_service.soil_alert(
+    # Update farm statistics if applicable
+    if payload.farm_id:
+        farm_doc = await _farm_svc.get(payload.farm_id)
+        if farm_doc:
+            await _farm_svc.update(payload.farm_id, {
+                "total_predictions": farm_doc.get("total_predictions", 0) + 1,
+                "last_prediction_at": now,
+                "updated_at": now
+            })
+
+    # ── Notification (using exact signature from notification_service.py) ─────
+    await notification_service.soil_alert(
         user_id=uid,
         moisture_percent=result["predicted_moisture"],
         prediction_id=prediction_id,
@@ -148,7 +165,7 @@ async def get_soil_history(
 ):
     """Return paginated soil prediction history for the current user."""
     uid = current_user["uid"]
-    all_preds = _soil_svc.query(
+    all_preds = await _soil_svc.query(
         "user_id", "==", uid,
         order_by="created_at", descending=True, limit=200,
     )
@@ -164,7 +181,7 @@ async def get_soil_prediction(
     current_user: dict = Depends(get_current_user),
 ):
     """Fetch a single soil prediction by ID."""
-    doc = _soil_svc.get(prediction_id)
+    doc = await _soil_svc.get(prediction_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Prediction not found.")
     if doc.get("user_id") != current_user["uid"] and current_user.get("role") != "admin":

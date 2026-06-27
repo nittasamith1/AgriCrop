@@ -52,9 +52,9 @@ class SoilPredictionRequest(BaseModel):
     temperature: float = Field(..., ge=-10, le=60, description="Temperature in °C")
     humidity: float = Field(..., ge=0, le=100, description="Relative humidity %")
     rainfall: float = Field(..., ge=0, le=500, description="Rainfall in mm")
-    wind_speed: float = Field(..., ge=0, le=150, description="Wind speed in km/h")
-    soil_type: str = Field(..., description="sandy|loamy|clay|silt|peaty")
-    previous_moisture: float = Field(..., ge=0, le=100, description="Previous moisture %")
+    wind_speed: float = Field(default=10.0, ge=0, le=150, description="Wind speed in km/h")
+    soil_type: str = Field(default="loamy", description="sandy|loamy|clay|silt|peaty")
+    previous_moisture: float = Field(default=50.0, ge=0, le=100, description="Previous moisture %")
     farm_id: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None

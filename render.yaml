@@ -1,0 +1,35 @@
+# AgriCrop – Render Deployment Configuration
+# https://render.com/docs/render-yaml
+
+services:
+  - type: web
+    name: agricrop-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: APP_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false  # Set in Render dashboard
+      - key: MONGODB_DB_NAME
+        value: agricrop
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 60
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: 30
+      - key: EMAIL_ENABLED
+        value: false
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: LOG_LEVEL
+        value: INFO

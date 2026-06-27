@@ -24,7 +24,7 @@ async def list_notifications(
 ):
     """Return paginated notifications for the current user."""
     uid = current_user["uid"]
-    all_notifs = notification_service.get_user_notifications(
+    all_notifs = await notification_service.get_user_notifications(
         user_id=uid, limit=200, unread_only=unread_only
     )
     total = len(all_notifs)
@@ -34,7 +34,7 @@ async def list_notifications(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "unread_count": notification_service.get_unread_count(uid),
+        "unread_count": await notification_service.get_unread_count(uid),
         "notifications": notifs,
     }
 
@@ -42,7 +42,7 @@ async def list_notifications(
 @router.get("/unread-count")
 async def get_unread_count(current_user: dict = Depends(get_current_user)):
     """Return the count of unread notifications (for badge display)."""
-    count = notification_service.get_unread_count(current_user["uid"])
+    count = await notification_service.get_unread_count(current_user["uid"])
     return {"unread_count": count}
 
 
@@ -52,7 +52,7 @@ async def mark_read(
     current_user: dict = Depends(get_current_user),
 ):
     """Mark a single notification as read."""
-    success = notification_service.mark_as_read(notification_id, current_user["uid"])
+    success = await notification_service.mark_as_read(notification_id, current_user["uid"])
     if not success:
         raise HTTPException(status_code=404, detail="Notification not found or access denied.")
     return {"message": "Notification marked as read.", "success": True}
@@ -61,5 +61,5 @@ async def mark_read(
 @router.post("/read-all")
 async def mark_all_read(current_user: dict = Depends(get_current_user)):
     """Mark all notifications as read for the current user."""
-    count = notification_service.mark_all_read(current_user["uid"])
+    count = await notification_service.mark_all_read(current_user["uid"])
     return {"message": f"{count} notifications marked as read.", "updated_count": count}

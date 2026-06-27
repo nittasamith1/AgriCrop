@@ -17,8 +17,8 @@ from backend.config import settings
 from backend.dependencies import get_current_user
 from backend.ai.disease_predictor import disease_predictor
 from backend.ai.recommendation_engine import get_disease_recommendations, get_crop_from_class
-from backend.services.firebase_service import FirestoreService
-from backend.services.storage_service import storage_service
+from backend.services.mongodb_service import MongoDBService
+from backend.services.gridfs_service import gridfs_service
 from backend.services.notification_service import notification_service
 from backend.utils.helpers import generate_id, utc_now, severity_from_confidence, marker_color_from_severity
 from backend.utils.validators import validate_image_upload
@@ -26,10 +26,9 @@ from backend.utils.validators import validate_image_upload
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
-_disease_svc = FirestoreService(settings.COLLECTION_DISEASE_PREDICTIONS)
-_pred_svc = FirestoreService(settings.COLLECTION_PREDICTIONS)
-_user_svc = FirestoreService(settings.COLLECTION_USERS)
-_farm_svc = FirestoreService(settings.COLLECTION_FARMS)
+_disease_svc = MongoDBService(settings.COLLECTION_DISEASE_PREDICTIONS, id_field="prediction_id")
+_user_svc = MongoDBService(settings.COLLECTION_USERS, id_field="uid")
+_farm_svc = MongoDBService(settings.COLLECTION_FARMS, id_field="farm_id")
 
 
 @router.post("/predict", status_code=status.HTTP_201_CREATED)
@@ -53,9 +52,10 @@ async def predict_disease(
     # ── Validate image ────────────────────────────────────────────────────────
     image_bytes = await validate_image_upload(file)
 
-    # ── Upload to Firebase Storage ────────────────────────────────────────────
+    # ── Upload to MongoDB GridFS ──────────────────────────────────────────────
     try:
-        image_url = storage_service.upload_leaf_image(
+        # We upload through GridFS
+        image_url = await gridfs_service.upload_leaf_image(
             content=image_bytes,
             filename=file.filename or "leaf.jpg",
             user_id=uid,
@@ -84,7 +84,7 @@ async def predict_disease(
     # ── Get farm location if farm_id provided ─────────────────────────────────
     farm_lat, farm_lon, district, state = latitude, longitude, None, None
     if farm_id:
-        farm_doc = _farm_svc.get(farm_id)
+        farm_doc = await _farm_svc.get(farm_id)
         if farm_doc and farm_doc.get("user_id") == uid:
             farm_lat = farm_lat or farm_doc.get("latitude")
             farm_lon = farm_lon or farm_doc.get("longitude")
@@ -125,15 +125,23 @@ async def predict_disease(
         "created_at": now,
     }
 
-    _disease_svc.create(prediction_id, prediction_doc)
+    await _disease_svc.create(prediction_id, prediction_doc)
 
     # Increment user total_predictions counter
     total = current_user.get("total_predictions", 0) + 1
-    _user_svc.update(uid, {"total_predictions": total, "updated_at": now})
+    await _user_svc.update(uid, {"total_predictions": total, "updated_at": now})
+
+    # Update farm statistics if applicable
+    if farm_id:
+        await _farm_svc.update(farm_id, {
+            "total_predictions": farm_doc.get("total_predictions", 0) + 1,
+            "last_prediction_at": now,
+            "updated_at": now
+        })
 
     # ── Send Notification ─────────────────────────────────────────────────────
     if not result["is_healthy"]:
-        notification_service.disease_alert(
+        await notification_service.disease_alert(
             user_id=uid,
             disease_name=result["disease_name"],
             severity=severity,
@@ -176,7 +184,7 @@ async def get_disease_history(
 ):
     """Return paginated disease prediction history for the current user."""
     uid = current_user["uid"]
-    all_preds = _disease_svc.query(
+    all_preds = await _disease_svc.query(
         "user_id", "==", uid,
         order_by="created_at", descending=True, limit=200,
     )
@@ -192,7 +200,7 @@ async def get_disease_prediction(
     current_user: dict = Depends(get_current_user),
 ):
     """Fetch a single disease prediction by ID."""
-    doc = _disease_svc.get(prediction_id)
+    doc = await _disease_svc.get(prediction_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Prediction not found.")
     if doc.get("user_id") != current_user["uid"] and current_user.get("role") != "admin":

@@ -4,19 +4,20 @@ GET /api/v1/history           – Combined disease + soil prediction history
 GET /api/v1/history/dashboard – Summary stats for dashboard
 """
 
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, Query
 from loguru import logger
 
 from backend.config import settings
 from backend.dependencies import get_current_user
-from backend.services.firebase_service import FirestoreService
+from backend.services.mongodb_service import MongoDBService
 
 router = APIRouter()
 
-_disease_svc = FirestoreService(settings.COLLECTION_DISEASE_PREDICTIONS)
-_soil_svc = FirestoreService(settings.COLLECTION_SOIL_PREDICTIONS)
-_user_svc = FirestoreService(settings.COLLECTION_USERS)
-_farm_svc = FirestoreService(settings.COLLECTION_FARMS)
+_disease_svc = MongoDBService(settings.COLLECTION_DISEASE_PREDICTIONS, id_field="prediction_id")
+_soil_svc = MongoDBService(settings.COLLECTION_SOIL_PREDICTIONS, id_field="prediction_id")
+_user_svc = MongoDBService(settings.COLLECTION_USERS, id_field="uid")
+_farm_svc = MongoDBService(settings.COLLECTION_FARMS, id_field="farm_id")
 
 
 @router.get("/")
@@ -34,14 +35,14 @@ async def get_combined_history(
     result = {"total": 0, "page": page, "page_size": page_size, "disease_predictions": [], "soil_predictions": []}
 
     if prediction_type in ("all", "disease"):
-        d_preds = _disease_svc.query("user_id", "==", uid, order_by="created_at", descending=True, limit=200)
+        d_preds = await _disease_svc.query("user_id", "==", uid, order_by="created_at", descending=True, limit=200)
         d_total = len(d_preds)
         start = (page - 1) * page_size
         result["disease_predictions"] = d_preds[start: start + page_size]
         result["disease_total"] = d_total
 
     if prediction_type in ("all", "soil"):
-        s_preds = _soil_svc.query("user_id", "==", uid, order_by="created_at", descending=True, limit=200)
+        s_preds = await _soil_svc.query("user_id", "==", uid, order_by="created_at", descending=True, limit=200)
         s_total = len(s_preds)
         start = (page - 1) * page_size
         result["soil_predictions"] = s_preds[start: start + page_size]
@@ -60,10 +61,10 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     """
     uid = current_user["uid"]
 
-    # Fetch all predictions
-    d_preds = _disease_svc.query("user_id", "==", uid, order_by="created_at", descending=True, limit=200)
-    s_preds = _soil_svc.query("user_id", "==", uid, order_by="created_at", descending=True, limit=200)
-    farms = _farm_svc.query("user_id", "==", uid, limit=50)
+    # Fetch predictions and farms
+    d_preds = await _disease_svc.query("user_id", "==", uid, order_by="created_at", descending=True, limit=200)
+    s_preds = await _soil_svc.query("user_id", "==", uid, order_by="created_at", descending=True, limit=200)
+    farms = await _farm_svc.query("user_id", "==", uid, limit=50)
 
     # Severity breakdown
     severity_counts = {"healthy": 0, "mild": 0, "moderate": 0, "severe": 0}
@@ -79,7 +80,6 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         crop_disease_map[crop][disease] = crop_disease_map[crop].get(disease, 0) + 1
 
     # Monthly counts (last 6 months)
-    from datetime import datetime, timezone, timedelta
     now = datetime.now(tz=timezone.utc)
     monthly_disease = {}
     monthly_soil = {}
@@ -93,10 +93,8 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         if not created:
             return ""
         if hasattr(created, "strftime"):
-            # datetime object
             return created.strftime("%Y-%m")
         if isinstance(created, str):
-            # ISO string like '2026-06-24T15:00:00+00:00'
             try:
                 return created[:7]  # 'YYYY-MM'
             except Exception:

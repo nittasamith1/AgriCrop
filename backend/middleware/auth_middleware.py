@@ -1,14 +1,14 @@
 """
 AgriCrop – Auth Middleware
-Provides Firebase token verification as middleware and utility functions
+Provides JWT token verification as middleware and utility functions
 for extracting user context from requests.
+Replaces Firebase completely with JWT.
 """
 
 from fastapi import Request, HTTPException, status
-from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from loguru import logger
-import firebase_admin.auth as firebase_auth
+from backend.services.auth_service import AuthService
 
 # Routes that do NOT require authentication
 PUBLIC_ROUTES = {
@@ -24,9 +24,9 @@ PUBLIC_ROUTES = {
 }
 
 
-class FirebaseAuthMiddleware(BaseHTTPMiddleware):
+class JWTAuthMiddleware(BaseHTTPMiddleware):
     """
-    Optional middleware that attaches the decoded Firebase token
+    Optional middleware that attaches the decoded JWT token payload
     to request.state.user for downstream use.
     This does NOT enforce auth — use Depends(get_current_user) for that.
     """
@@ -35,13 +35,17 @@ class FirebaseAuthMiddleware(BaseHTTPMiddleware):
         request.state.user = None
         auth_header = request.headers.get("Authorization", "")
 
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
+        token = auth_header.strip()
+        if token.lower().startswith("bearer "):
+            token = token[7:].strip()
+            
+        if token:
             try:
-                decoded = firebase_auth.verify_id_token(token, check_revoked=True)
+                # Clean quotes if present
+                token = token.strip('"').strip("'")
+                decoded = AuthService.verify_token(token, expected_type="access")
                 request.state.user = decoded
             except Exception as e:
-                # Not raising here — protected routes handle it via Depends
                 logger.debug(f"Token pre-verification failed (non-critical): {e}")
 
         response = await call_next(request)
@@ -50,7 +54,7 @@ class FirebaseAuthMiddleware(BaseHTTPMiddleware):
 
 def extract_uid_from_request(request: Request) -> str:
     """
-    Extract the Firebase UID from the request state set by middleware.
+    Extract the User UID from the request state set by middleware.
     Raises 401 if not authenticated.
     """
     user = getattr(request.state, "user", None)

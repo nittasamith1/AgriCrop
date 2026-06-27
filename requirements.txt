@@ -19,10 +19,12 @@ python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 python-dotenv>=1.0.1
 
-# ----- Firebase -----
-firebase-admin>=6.5.0
-google-cloud-firestore>=2.16.0
-google-cloud-storage>=2.16.0
+# ----- MongoDB Database -----
+motor>=3.4.0
+pymongo>=4.7.0
+
+# ----- SMTP Email -----
+aiosmtplib>=3.0.1
 
 # ----- AI / ML -----
 tensorflow>=2.15.0
@@ -43,8 +45,6 @@ limits>=3.11.0
 
 # ----- Logging -----
 loguru>=0.7.2
-
-# ----- CORS -----
 
 # ----- Testing -----
 pytest>=8.2.0
