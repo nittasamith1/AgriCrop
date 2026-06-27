@@ -101,6 +101,21 @@ python -m http.server 3000
 ```
 Open `http://localhost:3000` in your browser.
 
+### 3. Training AI Models Locally
+
+If you wish to retrain the models with your own data:
+
+```bash
+# Generate synthetic soil data (optional)
+python3 -c "import pandas as pd; ..." # see scripts
+
+# Train Soil model
+python3 -m ai_models.soil_model.train_soil_model
+
+# Train Disease model (requires PlantVillage dataset)
+python3 -m ai_models.disease_model.train_disease_model
+```
+
 ---
 
 ## ☁️ Deployment & Configuration

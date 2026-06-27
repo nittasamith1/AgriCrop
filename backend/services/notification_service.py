@@ -120,6 +120,34 @@ class NotificationService:
         logger.info(f"✅ System notification sent to {user_id}: {title}")
         return notif_id
 
+    def report_ready(
+        self,
+        user_id: str,
+        report_id: str,
+        report_type: str,
+    ) -> str:
+        """
+        Send a notification when a report is generated.
+        """
+        notif_id = generate_id("notif")
+        now = utc_now()
+
+        notif_doc = {
+            "notification_id": notif_id,
+            "user_id": user_id,
+            "type": "report_ready",
+            "title": "📄 Report Ready",
+            "message": f"Your {report_type} report has been generated and is ready for download.",
+            "related_id": report_id,
+            "is_read": False,
+            "created_at": now,
+            "read_at": None,
+        }
+
+        _notif_svc.create(notif_id, notif_doc)
+        logger.info(f"✅ Report notification sent to {user_id}: {report_id}")
+        return notif_id
+
     def get_notifications(
         self,
         user_id: str,

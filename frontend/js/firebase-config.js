@@ -138,7 +138,11 @@ if (isMock) {
       firebase.initializeApp(firebaseConfig);
     }
     firebaseAuth = firebase.auth();
-    firebaseStorage = firebase.storage();
+    try {
+      firebaseStorage = firebase.storage();
+    } catch (e) {
+      console.warn("Firebase Storage NOT loaded, maybe CDN script missing.");
+    }
 
     // Persist auth session in localStorage (survives browser close)
     firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e => {

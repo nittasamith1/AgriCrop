@@ -41,7 +41,7 @@ async def generate_report(
         if payload.report_type == "disease":
             predictions = _disease_svc.query("user_id", "==", uid, limit=100)
             pdf_bytes = report_service.generate_disease_report(
-                user_id=uid, user_name=user_name, predictions=predictions, report_id=report_id
+                user_id=uid, user_name=user_name, predictions=predictions
             )
         elif payload.report_type == "soil":
             predictions = _soil_svc.query("user_id", "==", uid, limit=100)
@@ -49,11 +49,10 @@ async def generate_report(
                 user_id=uid, user_name=user_name, predictions=predictions
             )
         elif payload.report_type == "combined":
-            d_preds = _disease_svc.query("user_id", "==", uid, limit=50)
-            s_preds = _soil_svc.query("user_id", "==", uid, limit=50)
-            # Generate disease PDF and soil PDF combined into one
-            pdf_bytes = report_service.generate_disease_report(
-                user_id=uid, user_name=user_name, predictions=d_preds, report_id=report_id
+            d_preds = _disease_svc.query("user_id", "==", uid, limit=100)
+            s_preds = _soil_svc.query("user_id", "==", uid, limit=100)
+            pdf_bytes = report_service.generate_combined_report(
+                user_id=uid, user_name=user_name, disease_preds=d_preds, soil_preds=s_preds
             )
         else:
             raise HTTPException(status_code=400, detail="Invalid report_type.")
