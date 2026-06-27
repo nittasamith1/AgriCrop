@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Analytics – AgriCrop</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="../../assets/css/main.css" rel="stylesheet"/>
+  <link href="../../assets/css/dark-mode.css" rel="stylesheet"/>
+  <link href="../../assets/css/animations.css" rel="stylesheet"/>
+</head>
+<body data-admin-page="analytics">
+<nav class="ag-navbar">
+  <div class="d-flex align-items-center gap-3 w-100" style="padding:0 1.5rem;">
+    <button class="d-lg-none btn-ag-icon" id="sidebar-toggle">☰</button>
+    <a href="/" class="brand" style="font-size:1.1rem;">🌱 AgriCrop <span style="font-size:0.7rem;color:var(--accent);font-weight:600;">ADMIN</span></a>
+    <div class="ms-auto d-flex gap-2 align-items-center">
+      <button id="theme-toggle"><span class="toggle-icon sun-icon">☀️</span><span class="toggle-icon moon-icon">🌙</span></button>
+      <a href="../dashboard.html" class="btn-ag-secondary" style="font-size:0.82rem;padding:0.45rem 1rem;">👤 User View</a>
+      <a href="#" onclick="Auth.logout()" class="btn-ag-secondary" style="font-size:0.82rem;padding:0.45rem 1rem;">🚪 Logout</a>
+    </div>
+  </div>
+</nav>
+
+<aside class="ag-sidebar" id="sidebar">
+  <div class="sidebar-section-label">Admin Panel</div>
+  <a href="dashboard.html" class="sidebar-link"><span class="link-icon">📊</span> Dashboard</a>
+  <a href="users.html" class="sidebar-link"><span class="link-icon">👥</span> User Management</a>
+  <a href="analytics.html" class="sidebar-link active"><span class="link-icon">📈</span> Analytics</a>
+  <a href="outbreaks.html" class="sidebar-link"><span class="link-icon">🔴</span> Disease Outbreaks</a>
+  <a href="reports.html" class="sidebar-link"><span class="link-icon">📄</span> All Reports</a>
+  <div class="sidebar-section-label">System</div>
+  <a href="../map.html" class="sidebar-link"><span class="link-icon">🗺️</span> GIS Map</a>
+  <a href="#" onclick="Auth.logout()" class="sidebar-link"><span class="link-icon">🚪</span> Logout</a>
+</aside>
+
+<main class="ag-content-area ag-page">
+  <div class="section-header mb-4">
+    <div>
+      <h2 class="section-title">📈 Advanced Analytics</h2>
+      <p class="section-subtitle">Deep dive into spatial agricultural trends, moisture variations, and plant diseases.</p>
+    </div>
+    <button onclick="initAnalytics()" class="btn-ag-secondary" style="font-size:0.82rem;">🔄 Refresh Charts</button>
+  </div>
+
+  <!-- Stats Counter Banner -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-2"><div class="stat-card"><div class="stat-icon blue">👥</div><div><div class="stat-label">Total Users</div><div class="stat-value" id="admin-total-users">—</div></div></div></div>
+    <div class="col-sm-6 col-xl-2"><div class="stat-card"><div class="stat-icon green">✅</div><div><div class="stat-label">Active</div><div class="stat-value" id="admin-active-users">—</div></div></div></div>
+    <div class="col-sm-6 col-xl-2"><div class="stat-card"><div class="stat-icon red">🦠</div><div><div class="stat-label">Disease Scans</div><div class="stat-value" id="admin-total-disease">—</div></div></div></div>
+    <div class="col-sm-6 col-xl-2"><div class="stat-card"><div class="stat-icon cyan">💧</div><div><div class="stat-label">Soil Scans</div><div class="stat-value" id="admin-total-soil">—</div></div></div></div>
+    <div class="col-sm-6 col-xl-2"><div class="stat-card"><div class="stat-icon amber">🌾</div><div><div class="stat-label">Total Farms</div><div class="stat-value" id="admin-total-farms">—</div></div></div></div>
+    <div class="col-sm-6 col-xl-2"><div class="stat-card"><div class="stat-icon green">📊</div><div><div class="stat-label">All Predictions</div><div class="stat-value" id="admin-total-predictions">—</div></div></div></div>
+  </div>
+
+  <!-- Disease Analytics Section -->
+  <h4 class="mb-3 text-muted">🦠 Plant Disease Intelligence</h4>
+  <div class="row g-4 mb-4">
+    <div class="col-lg-4">
+      <div class="chart-container">
+        <div class="chart-title">Disease Severity Breakdown</div>
+        <div style="height:250px;"><canvas id="admin-severity-chart"></canvas></div>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="chart-container">
+        <div class="chart-title">Top 8 Diseases</div>
+        <div style="height:250px;"><canvas id="admin-top-diseases-chart"></canvas></div>
+      </div>
+    </div>
+    <div class="col-lg-3">
+      <div class="chart-container">
+        <div class="chart-title">Disease by Crop</div>
+        <div style="height:250px;"><canvas id="admin-crop-stats-chart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Soil & Moisture Analytics Section -->
+  <h4 class="mb-3 text-muted">💧 Soil Moisture & Irrigation Analytics</h4>
+  <div class="row g-4 mb-4">
+    <div class="col-lg-8">
+      <div class="chart-container">
+        <div class="chart-title">Moisture Variations (Time Series)</div>
+        <div style="height:280px;"><canvas id="admin-moisture-chart"></canvas></div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="chart-container">
+        <div class="chart-title">Water Requirements Radar</div>
+        <div style="height:280px;"><canvas id="admin-water-radar"></canvas></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="ag-toast-container" class="ag-toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+
+<script src="../../assets/js/utils.js"></script>
+<script src="../../assets/js/auth-config.js"></script>
+<script src="../../assets/js/api.js"></script>
+<script src="../../assets/js/auth.js"></script>
+<script src="../../assets/js/charts.js"></script>
+<script src="../../assets/js/admin.js"></script>
+<script>
+  document.getElementById("sidebar-toggle")?.addEventListener("click", () => {
+    document.getElementById("sidebar")?.classList.toggle("open");
+  });
+</script>
+</body>
+</html>

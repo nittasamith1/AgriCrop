@@ -1,41 +1,35 @@
-# AgriCrop - Render Configuration
-# This file tells Render how to build and run the backend web service.
+# AgriCrop – Render Deployment Configuration
+# https://render.com/docs/render-yaml
 
 services:
   - type: web
     name: agricrop-backend
-    env: docker
+    env: python
     region: oregon
     plan: free
-    dockerfilePath: Dockerfile.backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
-    # Ensure this is set to false so the service isn't exposed publicly before environment variables are set
-    autoDeploy: true
     envVars:
-      - key: APP_NAME
-        value: AgriCrop
+      - key: PYTHON_VERSION
+        value: 3.11.0
       - key: APP_ENV
         value: production
+      - key: MONGODB_URI
+        sync: false  # Set in Render dashboard
+      - key: MONGODB_DB_NAME
+        value: agricrop
       - key: SECRET_KEY
         generateValue: true
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 60
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: 30
+      - key: EMAIL_ENABLED
+        value: false
       - key: ALLOWED_ORIGINS
         value: "*"
-      - key: LOG_FILE
-        value: /tmp/agricrop.log
-      - key: UPLOAD_TEMP_DIR
-        value: /tmp/agricrop_uploads
-      # Firebase credentials must be set manually in the Render Dashboard
-      - key: FIREBASE_PROJECT_ID
-        sync: false
-      - key: FIREBASE_PRIVATE_KEY_ID
-        sync: false
-      - key: FIREBASE_PRIVATE_KEY
-        sync: false
-      - key: FIREBASE_CLIENT_EMAIL
-        sync: false
-      - key: FIREBASE_CLIENT_ID
-        sync: false
-      - key: FIREBASE_API_KEY
-        sync: false
-      - key: FIREBASE_STORAGE_BUCKET
-        sync: false
+      - key: LOG_LEVEL
+        value: INFO

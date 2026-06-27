@@ -1,31 +1,24 @@
 """
 AgriCrop – Admin Router
-Protected endpoints for platform administrators.
-
-GET  /api/v1/admin/users          – List all users
-DELETE /api/v1/admin/users/{uid}  – Delete a user
-GET  /api/v1/admin/analytics      – Platform-wide analytics
-GET  /api/v1/admin/disease-outbreaks – Active outbreaks
-GET  /api/v1/admin/reports        – All generated reports
-POST /api/v1/admin/users/{uid}/toggle-status – Enable/disable user
+Protected endpoints for platform administrators. Handles user moderation, platform-wide analytics, and logs.
+Replaces Firebase completely with MongoDB.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
-import firebase_admin.auth as firebase_auth
 
 from backend.config import settings
 from backend.dependencies import require_admin
-from backend.services.firebase_service import FirestoreService
+from backend.services.mongodb_service import MongoDBService
+from backend.utils.helpers import utc_now
 
 router = APIRouter()
 
-_user_svc = FirestoreService(settings.COLLECTION_USERS)
-_disease_svc = FirestoreService(settings.COLLECTION_DISEASE_PREDICTIONS)
-_soil_svc = FirestoreService(settings.COLLECTION_SOIL_PREDICTIONS)
-_farm_svc = FirestoreService(settings.COLLECTION_FARMS)
-_report_svc = FirestoreService(settings.COLLECTION_REPORTS)
-_notif_svc = FirestoreService(settings.COLLECTION_NOTIFICATIONS)
+_user_svc = MongoDBService(settings.COLLECTION_USERS, id_field="uid")
+_disease_svc = MongoDBService(settings.COLLECTION_DISEASE_PREDICTIONS, id_field="prediction_id")
+_soil_svc = MongoDBService(settings.COLLECTION_SOIL_PREDICTIONS, id_field="prediction_id")
+_farm_svc = MongoDBService(settings.COLLECTION_FARMS, id_field="farm_id")
+_report_svc = MongoDBService(settings.COLLECTION_REPORTS, id_field="report_id")
 
 
 @router.get("/users")
@@ -36,7 +29,7 @@ async def list_users(
     admin: dict = Depends(require_admin),
 ):
     """Return all registered users with pagination."""
-    all_users = _user_svc.list_all(limit=1000)
+    all_users = await _user_svc.list_all(limit=1000)
     if role != "all":
         all_users = [u for u in all_users if u.get("role") == role]
     total = len(all_users)
@@ -52,7 +45,7 @@ async def list_users(
 @router.get("/users/{uid}")
 async def get_user(uid: str, admin: dict = Depends(require_admin)):
     """Get a single user's full profile."""
-    doc = _user_svc.get(uid)
+    doc = await _user_svc.get(uid)
     if not doc:
         raise HTTPException(status_code=404, detail="User not found.")
     return doc
@@ -61,33 +54,30 @@ async def get_user(uid: str, admin: dict = Depends(require_admin)):
 @router.delete("/users/{uid}")
 async def delete_user(uid: str, admin: dict = Depends(require_admin)):
     """
-    Delete a user from Firebase Auth and Firestore.
+    Delete a user from the platform (MongoDB).
     Also deletes their predictions and farm records.
     """
     if uid == admin["uid"]:
         raise HTTPException(status_code=400, detail="Cannot delete your own admin account.")
 
-    # Delete from Firebase Auth
-    try:
-        firebase_auth.delete_user(uid)
-    except firebase_auth.UserNotFoundError:
-        logger.warning(f"Firebase user {uid} not found — proceeding with Firestore cleanup")
-
-    # Delete Firestore user document
-    _user_svc.delete(uid)
+    # Delete user profile document
+    deleted = await _user_svc.delete(uid)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User not found.")
 
     # Clean up predictions
-    d_preds = _disease_svc.query("user_id", "==", uid, limit=200)
+    d_preds = await _disease_svc.query("user_id", "==", uid, limit=200)
     for p in d_preds:
-        _disease_svc.delete(p["prediction_id"])
+        await _disease_svc.delete(p["prediction_id"])
 
-    s_preds = _soil_svc.query("user_id", "==", uid, limit=200)
+    s_preds = await _soil_svc.query("user_id", "==", uid, limit=200)
     for p in s_preds:
-        _soil_svc.delete(p["prediction_id"])
+        await _soil_svc.delete(p["prediction_id"])
 
-    farms = _farm_svc.query("user_id", "==", uid, limit=50)
+    # Clean up farms
+    farms = await _farm_svc.query("user_id", "==", uid, limit=50)
     for f in farms:
-        _farm_svc.delete(f["farm_id"])
+        await _farm_svc.delete(f["farm_id"])
 
     logger.info(f"Admin {admin['uid']} deleted user {uid}")
     return {"message": f"User {uid} deleted successfully.", "success": True}
@@ -96,11 +86,11 @@ async def delete_user(uid: str, admin: dict = Depends(require_admin)):
 @router.post("/users/{uid}/toggle-status")
 async def toggle_user_status(uid: str, admin: dict = Depends(require_admin)):
     """Enable or disable a user account."""
-    doc = _user_svc.get(uid)
+    doc = await _user_svc.get(uid)
     if not doc:
         raise HTTPException(status_code=404, detail="User not found.")
     new_status = not doc.get("is_active", True)
-    _user_svc.update(uid, {"is_active": new_status})
+    await _user_svc.update(uid, {"is_active": new_status, "updated_at": utc_now()})
     action = "activated" if new_status else "deactivated"
     logger.info(f"Admin {admin['uid']} {action} user {uid}")
     return {"message": f"User {action} successfully.", "is_active": new_status}
@@ -111,10 +101,10 @@ async def get_platform_analytics(admin: dict = Depends(require_admin)):
     """
     Return platform-wide analytics for the admin dashboard.
     """
-    all_users = _user_svc.list_all(limit=5000)
-    all_disease = _disease_svc.list_all(limit=5000)
-    all_soil = _soil_svc.list_all(limit=5000)
-    all_farms = _farm_svc.list_all(limit=5000)
+    all_users = await _user_svc.list_all(limit=5000)
+    all_disease = await _disease_svc.list_all(limit=5000)
+    all_soil = await _soil_svc.list_all(limit=5000)
+    all_farms = await _farm_svc.list_all(limit=5000)
 
     # User stats
     total_users = len(all_users)
@@ -183,7 +173,7 @@ async def get_disease_outbreaks(
     admin: dict = Depends(require_admin),
 ):
     """Return active disease outbreaks filtered by severity."""
-    preds = _disease_svc.list_all(limit=1000)
+    preds = await _disease_svc.list_all(limit=1000)
     outbreaks = [
         p for p in preds
         if p.get("severity") == severity and p.get("latitude")
@@ -211,7 +201,7 @@ async def list_all_reports(
     admin: dict = Depends(require_admin),
 ):
     """Return all reports generated on the platform."""
-    all_reports = _report_svc.list_all(limit=500)
+    all_reports = await _report_svc.list_all(limit=500)
     total = len(all_reports)
     start = (page - 1) * page_size
     return {

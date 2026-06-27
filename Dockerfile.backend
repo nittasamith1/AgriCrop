@@ -1,63 +1,50 @@
-# ── AgriCrop Backend Dockerfile ──────────────────────────────────────────────
-FROM python:3.11-slim
+# ── Stage 1: Builder ─────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
 
-LABEL maintainer="AgriCrop Team"
-LABEL description="AgriCrop FastAPI Backend – AI-Powered Precision Agriculture"
+WORKDIR /build
 
-# Set environment
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    TF_CPP_MIN_LOG_LEVEL=2 \
-    TF_FORCE_GPU_ALLOW_GROWTH=true \
-    PYTHONPATH=/app
+# Install system dependencies for TensorFlow + OpenCV
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ git libglib2.0-0 libsm6 libxext6 libxrender-dev \
+    libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ── Stage 2: Production Runtime ───────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Install system dependencies
+# System runtime libs only
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    wget \
-    curl \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
+    libglib2.0-0 libsm6 libxext6 libgomp1 curl && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY backend/ ./backend/
 COPY ai_models/ ./ai_models/
 COPY datasets/ ./datasets/
-# Make this copy optional (succeeds even if file is missing from git)
-COPY serviceAccountKey.jso[n] ./serviceAccountKey.json
 
-# Create all required directories (fixed paths to match config.py settings)
-RUN mkdir -p /app/ai_models/saved_models \
-             /app/logs \
-             /app/tmp/agricrop_uploads
+# Create runtime directories
+RUN mkdir -p logs tmp/agricrop_uploads
 
-# Non-root user for security
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
-RUN chown -R appuser:appgroup /app
-USER appuser
+# Environment defaults
+ENV APP_ENV=production \
+    APP_PORT=8000 \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1
 
-# Expose port
 EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || exit 1
 
-# Launch with Uvicorn
-# Note: --workers 1 on Render Free tier (no multiprocessing disk issues)
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "1", "--loop", "uvloop", "--http", "httptools", \
-     "--access-log", "--log-level", "info"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

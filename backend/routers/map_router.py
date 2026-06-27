@@ -12,14 +12,13 @@ from loguru import logger
 
 from backend.config import settings
 from backend.dependencies import get_current_user
-from backend.services.firebase_service import FirestoreService
+from backend.services.mongodb_service import MongoDBService
 from backend.utils.helpers import marker_color_from_severity
 
 router = APIRouter()
 
-_farm_svc = FirestoreService(settings.COLLECTION_FARMS)
-_disease_svc = FirestoreService(settings.COLLECTION_DISEASE_PREDICTIONS)
-_soil_svc = FirestoreService(settings.COLLECTION_SOIL_PREDICTIONS)
+_farm_svc = MongoDBService(settings.COLLECTION_FARMS, id_field="farm_id")
+_disease_svc = MongoDBService(settings.COLLECTION_DISEASE_PREDICTIONS, id_field="prediction_id")
 
 
 @router.get("/markers")
@@ -35,8 +34,8 @@ async def get_map_markers(
     Return all farm markers for the GIS map.
     Each marker includes the latest disease/soil status for color coding.
     """
-    # Fetch all recent disease predictions
-    disease_preds = _disease_svc.list_all(limit=500)
+    # Fetch recent disease predictions
+    disease_preds = await _disease_svc.list_all(limit=500)
 
     # Build farm_id → latest prediction lookup
     farm_latest: dict = {}
@@ -45,11 +44,14 @@ async def get_map_markers(
         if not fid:
             continue
         existing = farm_latest.get(fid)
-        if existing is None or pred.get("created_at", "") > existing.get("created_at", ""):
+        # Handle string comparisons correctly
+        pred_created = str(pred.get("created_at", ""))
+        existing_created = str(existing.get("created_at", "")) if existing else ""
+        if not existing or pred_created > existing_created:
             farm_latest[fid] = pred
 
     # Fetch all farms
-    farms = _farm_svc.list_all(limit=limit)
+    farms = await _farm_svc.list_all(limit=limit)
     markers = []
 
     for farm in farms:
@@ -103,7 +105,7 @@ async def get_heatmap_data(
     Return heatmap data points (lat, lng, intensity) for disease severity visualization.
     Intensity is mapped from severity: healthy=0.1, mild=0.3, moderate=0.6, severe=1.0
     """
-    preds = _disease_svc.list_all(limit=500)
+    preds = await _disease_svc.list_all(limit=500)
     intensity_map = {"healthy": 0.1, "mild": 0.3, "moderate": 0.6, "severe": 1.0}
     points = []
     for p in preds:
@@ -124,7 +126,7 @@ async def get_disease_hotspots(
     """
     Return severe/moderate disease hotspot clusters for the map.
     """
-    preds = _disease_svc.list_all(limit=500)
+    preds = await _disease_svc.list_all(limit=500)
     hotspots = []
     for p in preds:
         if p.get("severity") in ("severe", "moderate") and p.get("latitude"):
@@ -147,7 +149,7 @@ async def get_disease_hotspots(
 async def get_my_farm_markers(current_user: dict = Depends(get_current_user)):
     """Return only the current user's farms as map markers."""
     uid = current_user["uid"]
-    farms = _farm_svc.query("user_id", "==", uid, limit=50)
+    farms = await _farm_svc.query("user_id", "==", uid, limit=50)
     markers = [
         {
             "farm_id": f.get("farm_id"),

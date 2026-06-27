@@ -22,8 +22,8 @@ def utc_now() -> datetime:
 
 def sanitize_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Remove None and empty values from a dict for Firestore updates.
-    Firestore doesn't accept None values directly.
+    Remove None and empty values from a dict for MongoDB updates.
+    Use when building $set payloads to avoid overwriting fields with None.
     """
     return {k: v for k, v in data.items() if v is not None}
 
