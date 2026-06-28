@@ -69,15 +69,25 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────
     ALLOWED_ORIGINS: str = (
         "http://localhost:3000,http://localhost:8000,http://localhost:8080,"
-        "http://127.0.0.1:3000,http://127.0.0.1:8000,http://127.0.0.1:8080"
+        "http://127.0.0.1:3000,http://127.0.0.1:8000,http://127.0.0.1:8080,"
+        "https://agricrop.vercel.app"
     )
 
     @property
     def cors_origins(self) -> List[str]:
         """Parse comma-separated ALLOWED_ORIGINS into a list.
         NOTE: Do NOT include '*' when allow_credentials=True (FastAPI restriction).
+        If '*' is set (e.g. from Render env var), expand it to known safe origins.
         """
-        origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip() and o.strip() != "*"]
+        raw = self.ALLOWED_ORIGINS.strip()
+        # If wildcard is set, fall back to permissive but valid origins list
+        if raw == "*":
+            return [
+                "http://localhost:3000", "http://localhost:8000", "http://localhost:8080",
+                "http://127.0.0.1:8080",
+                "https://agricrop.vercel.app",
+            ]
+        origins = [o.strip() for o in raw.split(",") if o.strip() and o.strip() != "*"]
         return origins if origins else ["http://localhost:8080"]
 
     # ── Rate Limiting ─────────────────────────────────────────
@@ -87,7 +97,8 @@ class Settings(BaseSettings):
     # ── File Upload ───────────────────────────────────────────
     MAX_UPLOAD_SIZE_MB: int = 10
     ALLOWED_IMAGE_EXTENSIONS: str = "jpg,jpeg,png,webp,bmp"
-    UPLOAD_TEMP_DIR: str = "./tmp/agricrop_uploads"
+    # Use /tmp on Render (ephemeral but always exists); local fallback to ./tmp
+    UPLOAD_TEMP_DIR: str = "/tmp/agricrop_uploads"
 
     @property
     def allowed_extensions(self) -> List[str]:

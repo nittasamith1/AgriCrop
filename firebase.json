@@ -13,10 +13,6 @@
           "serviceId": "agricrop-backend",
           "region": "us-central1"
         }
-      },
-      {
-        "source": "**",
-        "destination": "/404.html"
       }
     ],
     "headers": [
