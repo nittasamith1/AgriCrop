@@ -33,29 +33,16 @@ async def generate_report(
 
     try:
         if payload.report_type == "disease":
-<<<<<<< HEAD
-            predictions = _disease_svc.query("user_id", "==", uid, limit=100)
-            pdf_bytes = report_service.generate_disease_report(
-                user_id=uid, user_name=user_name, predictions=predictions
-=======
             doc = await report_service.generate_disease_report(
                 user_id=uid, user_name=user_name, farm_id=payload.farm_id
->>>>>>> abb845e (new update commit)
             )
         elif payload.report_type == "soil":
             doc = await report_service.generate_soil_report(
                 user_id=uid, user_name=user_name, farm_id=payload.farm_id
             )
         elif payload.report_type == "combined":
-<<<<<<< HEAD
-            d_preds = _disease_svc.query("user_id", "==", uid, limit=100)
-            s_preds = _soil_svc.query("user_id", "==", uid, limit=100)
-            pdf_bytes = report_service.generate_combined_report(
-                user_id=uid, user_name=user_name, disease_preds=d_preds, soil_preds=s_preds
-=======
             doc = await report_service.generate_combined_report(
                 user_id=uid, user_name=user_name, farm_id=payload.farm_id
->>>>>>> abb845e (new update commit)
             )
         else:
             raise HTTPException(status_code=400, detail="Invalid report_type.")

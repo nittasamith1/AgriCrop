@@ -2,32 +2,17 @@
  * AgriCrop – API Client Module
  * Typed wrapper around all backend REST endpoints.
  * Automatically attaches Authorization header using Auth.getToken().
-<<<<<<< HEAD:frontend/js/api.js
- */
-
-// ── API Base URL Configuration ─────────────────────────────────────────────
-// - Local development:  FastAPI runs on localhost:8000
-// - Production (Firebase): /api/** is proxied to Cloud Functions or Cloud Run
-=======
  * Handles automatic JWT token refresh on 401 Unauthorized errors.
  */
-
->>>>>>> abb845e (new update commit):frontend/assets/js/api.js
 (function () {
   const hostname = window.location.hostname;
   
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     window.API_BASE = "http://localhost:8000";
-<<<<<<< HEAD:frontend/js/api.js
-  } else {
-    // Production - relative path for Firebase Hosting
-    window.API_BASE = "";
-=======
   } else if (hostname.includes("vercel") || hostname.includes("vercel.app")) {
     window.API_BASE = "";
   } else {
     window.API_BASE = window.BACKEND_URL || "";
->>>>>>> abb845e (new update commit):frontend/assets/js/api.js
   }
   
   console.log("🌾 AgriCrop API Base:", window.API_BASE || "(relative)");

@@ -1,62 +1,136 @@
+"""
+test_auth.py – JWT/MongoDB-based auth tests (no Firebase)
+"""
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from backend.main import app
 
 client = TestClient(app)
 
-@pytest.fixture
-def mock_firebase_auth():
-    with patch("backend.routers.auth.firebase_auth") as mock_auth:
-        from firebase_admin import auth as fb_auth
-        mock_auth.EmailAlreadyExistsError = fb_auth.EmailAlreadyExistsError
-        yield mock_auth
 
-@pytest.fixture
-def mock_firestore():
-    with patch("backend.services.firebase_service.get_firestore_client") as mock_client:
-        mock_db = MagicMock()
-        mock_client.return_value = mock_db
-        yield mock_db
+# ── Fixtures ───────────────────────────────────────────────────────────────────
 
-def test_register_success(mock_firebase_auth, mock_firestore):
-    # Mock Firebase Auth user creation
-    mock_user = MagicMock()
-    mock_user.uid = "test-uid-123"
-    mock_firebase_auth.create_user.return_value = mock_user
-    mock_firebase_auth.generate_email_verification_link.return_value = "http://verify-link"
+EXISTING_USER = {
+    "uid": "existing-uid-001",
+    "email": "existing@example.com",
+    "name": "Existing Farmer",
+    "hashed_password": "$2b$12$KIX/4SqdZeR5BFCNnPtOxeP6HYqD9M9cI1cMJIjTh1gV2gCnbcfBe",
+    "role": "farmer",
+    "is_active": True,
+    "email_verified": True,
+}
 
-    # Mock Firestore User document write
-    mock_doc = MagicMock()
-    mock_firestore.collection.return_value.document.return_value = mock_doc
 
-    payload = {
-        "email": "farmer@example.com",
-        "password": "strongpassword123",
-        "name": "Samith Nitta",
-        "role": "farmer",
-        "phone": "+919876543210",
-        "state": "Andhra Pradesh",
-        "district": "Chittoor"
-    }
+def _patch_register(user_exists=None):
+    """Return a context manager stack that patches every async call in register."""
+    return (
+        patch("backend.routers.auth._user_svc"),
+        patch("backend.routers.auth._reset_svc"),
+        patch("backend.routers.auth.notification_service"),
+        patch("backend.routers.auth.email_service"),
+    )
 
-    # Execute
-    response = client.post("/api/v1/auth/register", json=payload)
 
-    # Assertions
-    assert response.status_code == 201
-    assert "message" in response.json()
-    assert mock_firebase_auth.create_user.called
-    assert mock_firestore.collection.called
+# ── Test: POST /api/v1/auth/register ──────────────────────────────────────────
 
-def test_forgot_password(mock_firebase_auth):
-    mock_firebase_auth.generate_password_reset_link.return_value = "http://reset-link"
+def test_register_success():
+    """New user registration should return 201 and a message."""
+    with patch("backend.routers.auth._user_svc") as mock_user_svc, \
+         patch("backend.routers.auth._reset_svc") as mock_reset_svc, \
+         patch("backend.routers.auth.notification_service") as mock_notif, \
+         patch("backend.routers.auth.email_service") as mock_email:
 
-    response = client.post("/api/v1/auth/forgot-password?email=farmer@example.com")
-    assert response.status_code == 200
-    assert "Password reset link generated" in response.json()["message"]
+        # Simulate: no existing account with this email
+        mock_collection = MagicMock()
+        mock_collection.find_one = AsyncMock(return_value=None)
+        mock_user_svc.collection = mock_collection
+        mock_user_svc.create = AsyncMock(return_value=True)
+
+        mock_reset_svc.create = AsyncMock(return_value=True)
+        mock_notif.system_notification = AsyncMock(return_value=None)
+        mock_email.send_verification_email = AsyncMock(return_value=None)
+
+        payload = {
+            "email": "newfarmer@example.com",
+            "password": "StrongPass123!",
+            "name": "New Farmer",
+            "role": "farmer",
+            "phone": "+919876543210",
+            "state": "Andhra Pradesh",
+            "district": "Chittoor",
+        }
+
+        response = client.post("/api/v1/auth/register", json=payload)
+
+        assert response.status_code == 201, response.text
+        assert "message" in response.json()
+        mock_user_svc.create.assert_called_once()
+
+
+def test_register_duplicate_email():
+    """Registering with an already-used email should return 409 Conflict."""
+    with patch("backend.routers.auth._user_svc") as mock_user_svc:
+        mock_collection = MagicMock()
+        mock_collection.find_one = AsyncMock(return_value=EXISTING_USER)
+        mock_user_svc.collection = mock_collection
+
+        payload = {
+            "email": "existing@example.com",
+            "password": "StrongPass123!",
+            "name": "Duplicate",
+            "role": "farmer",
+        }
+
+        response = client.post("/api/v1/auth/register", json=payload)
+        # Backend returns 409 Conflict for duplicate emails
+        assert response.status_code == 409
+
+
+# ── Test: POST /api/v1/auth/forgot-password ───────────────────────────────────
+
+def test_forgot_password_known_email():
+    """forgot-password with a known email should return 200 with a message."""
+    with patch("backend.routers.auth._user_svc") as mock_user_svc, \
+         patch("backend.routers.auth._reset_svc") as mock_reset_svc, \
+         patch("backend.routers.auth.email_service") as mock_email:
+
+        mock_collection = MagicMock()
+        mock_collection.find_one = AsyncMock(return_value=EXISTING_USER)
+        mock_user_svc.collection = mock_collection
+
+        mock_reset_svc.create = AsyncMock(return_value=True)
+        mock_email.send_password_reset_email = AsyncMock(return_value=None)
+
+        response = client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "existing@example.com"},
+        )
+
+        assert response.status_code == 200
+        assert "message" in response.json()
+
+
+def test_forgot_password_unknown_email():
+    """forgot-password with unknown email should still return 200 (anti-enumeration)."""
+    with patch("backend.routers.auth._user_svc") as mock_user_svc:
+        mock_collection = MagicMock()
+        mock_collection.find_one = AsyncMock(return_value=None)
+        mock_user_svc.collection = mock_collection
+
+        response = client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "ghost@example.com"},
+        )
+
+        assert response.status_code == 200
+        assert "message" in response.json()
+
+
+# ── Test: GET /api/v1/auth/me (unauthenticated) ───────────────────────────────
 
 def test_get_profile_unauthorized():
+    """Accessing /me without a token should return 401."""
     response = client.get("/api/v1/auth/me")
     assert response.status_code == 401

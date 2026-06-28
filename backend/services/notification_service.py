@@ -115,8 +115,7 @@ class NotificationService:
         logger.info(f"✅ System notification sent to {user_id}: {title}")
         return notif_id
 
-<<<<<<< HEAD
-    def report_ready(
+    async def report_ready(
         self,
         user_id: str,
         report_id: str,
@@ -140,14 +139,11 @@ class NotificationService:
             "read_at": None,
         }
 
-        _notif_svc.create(notif_id, notif_doc)
+        await _notif_svc.create(notif_id, notif_doc)
         logger.info(f"✅ Report notification sent to {user_id}: {report_id}")
         return notif_id
 
-    def get_notifications(
-=======
     async def get_notifications(
->>>>>>> abb845e (new update commit)
         self,
         user_id: str,
         unread_only: bool = False,

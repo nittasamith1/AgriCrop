@@ -29,14 +29,14 @@ function renderStats(data) {
   if (nameEl) nameEl.textContent = user?.name?.split(" ")[0] || "Farmer";
 
   const stats = [
-    { id: "stat-total-preds",  value: data.total_predictions || 0,         suffix: "" },
-    { id: "stat-disease-preds",value: data.total_disease_predictions || 0, suffix: "" },
-    { id: "stat-soil-preds",   value: data.total_soil_predictions || 0,    suffix: "" },
-    { id: "stat-farms",        value: data.total_farms || 0,                suffix: "" },
-    { id: "stat-healthy",      value: data.severity_breakdown?.healthy || 0,suffix: "" },
-    { id: "stat-diseased",     value: data.diseased_count || 0,             suffix: "" },
-    { id: "stat-moisture",     value: data.average_soil_moisture || 0,      suffix: "%" },
-    { id: "stat-irrigation",   value: data.irrigation_needed_count || 0,    suffix: "" },
+    { id: "stat-total-preds", value: data.total_predictions || 0, suffix: "" },
+    { id: "stat-disease-preds", value: data.total_disease_predictions || 0, suffix: "" },
+    { id: "stat-soil-preds", value: data.total_soil_predictions || 0, suffix: "" },
+    { id: "stat-farms", value: data.total_farms || 0, suffix: "" },
+    { id: "stat-healthy", value: data.severity_breakdown?.healthy || 0, suffix: "" },
+    { id: "stat-diseased", value: data.diseased_count || 0, suffix: "" },
+    { id: "stat-moisture", value: data.average_soil_moisture || 0, suffix: "%" },
+    { id: "stat-irrigation", value: data.irrigation_needed_count || 0, suffix: "" },
   ];
   const statsGrid = document.getElementById("stats-grid");
   if (statsGrid) statsGrid.innerHTML = buildStatsHTML(data);
@@ -115,7 +115,7 @@ function renderRecentPredictions(data) {
     } else {
       dList.innerHTML = dPreds.map(p => `
         <a href="/disease-result.html?id=${p.prediction_id}" class="d-flex align-items-center gap-3 p-3 mb-2 ag-card text-decoration-none" style="border-radius:10px;">
-          <img src="${p.image_url || 'assets/images/leaf-placeholder.png'}" alt="leaf" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0;">
+          <img src="${p.image_url || '../assets/images/leaf-placeholder.png'}" alt="leaf" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0;" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='../assets/images/leaf-placeholder.png';}">
           <div style="min-width:0;flex:1;">
             <div class="fw-600 truncate" style="font-size:0.88rem;color:var(--text-primary);">${p.disease_name || "Unknown"}</div>
             <div class="d-flex align-items-center gap-2 mt-1">

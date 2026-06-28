@@ -30,7 +30,10 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # ── MongoDB Atlas ─────────────────────────────────────────
-    MONGODB_URI: str = "mongodb://localhost:27017"
+    MONGODB_URI: str = os.getenv(
+    "MONGODB_URI",
+    "mongodb+srv://db_user:3gWRpw4tTssyTR8Z@cluster0.xdax7ct.mongodb.net/?appName=Cluster0"
+    )
     MONGODB_DB_NAME: str = "agricrop"
 
     # ── MongoDB Collection Names ──────────────────────────────

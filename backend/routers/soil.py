@@ -71,17 +71,10 @@ async def predict_soil(
             })
 
     # ── Build recommendation text ─────────────────────────────────────────────
-<<<<<<< HEAD
-    recommendation = get_irrigation_recommendation(
-        predicted_moisture=result["predicted_moisture"]
-    )
-    recommendation_text = recommendation["message"]
-=======
     rec_data = get_irrigation_recommendation(
         predicted_moisture=result["predicted_moisture"]
     )
     recommendation_text = rec_data["message"]
->>>>>>> abb845e (new update commit)
 
     # ── Save to MongoDB ───────────────────────────────────────────────────────
     prediction_id = generate_id("spred")
