@@ -2,20 +2,20 @@
   "outputDirectory": "frontend",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://agricrop-backend.onrender.com/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://agricrop-backend.onrender.com/api/:path*"
     },
     {
-      "source": "/assets/(.*)",
-      "destination": "/frontend/assets/$1"
+      "source": "/assets/:path*",
+      "destination": "/frontend/assets/:path*"
     },
     {
-      "source": "/pages/(.*)",
-      "destination": "/frontend/pages/$1"
+      "source": "/pages/:path*",
+      "destination": "/frontend/pages/:path*"
     },
     {
-      "source": "/(manifest.json|robots.txt|sitemap.xml|404.html)",
-      "destination": "/frontend/$1"
+      "source": "/:file(manifest.json|robots.txt|sitemap.xml|404.html)",
+      "destination": "/frontend/:file"
     },
     {
       "source": "/",

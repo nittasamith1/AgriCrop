@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://agricrop-backend.onrender.com/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://agricrop-backend.onrender.com/api/:path*"
     }
   ],
   "headers": [
