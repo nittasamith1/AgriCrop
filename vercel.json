@@ -4,6 +4,26 @@
     {
       "source": "/api/(.*)",
       "destination": "https://agricrop-backend.onrender.com/api/$1"
+    },
+    {
+      "source": "/assets/(.*)",
+      "destination": "/frontend/assets/$1"
+    },
+    {
+      "source": "/pages/(.*)",
+      "destination": "/frontend/pages/$1"
+    },
+    {
+      "source": "/(manifest.json|robots.txt|sitemap.xml|404.html)",
+      "destination": "/frontend/$1"
+    },
+    {
+      "source": "/",
+      "destination": "/frontend/index.html"
+    },
+    {
+      "source": "/index.html",
+      "destination": "/frontend/index.html"
     }
   ],
   "headers": [
@@ -16,7 +36,7 @@
         },
         {
           "key": "X-Frame-Options",
-          "value": "DENY"
+          "value": "SAMEORIGIN"
         },
         {
           "key": "X-XSS-Protection",

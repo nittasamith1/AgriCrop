@@ -23,6 +23,7 @@ from backend.routers import auth, disease, soil, map_router, history, notificati
 
 # ── Logging Setup ─────────────────────────────────────────────────────────────
 os.makedirs("logs", exist_ok=True)
+os.makedirs(settings.UPLOAD_TEMP_DIR, exist_ok=True)
 logger.remove()
 logger.add(sys.stderr, level=settings.LOG_LEVEL, colorize=True,
            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>")
@@ -85,6 +86,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
