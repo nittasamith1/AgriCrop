@@ -5,7 +5,6 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)](https://fastapi.tiangolo.com)
 [![MongoDB](https://img.shields.io/badge/MongoDB_Atlas-7.0-47A248?logo=mongodb)](https://www.mongodb.com/atlas)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python)](https://www.python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
@@ -210,8 +209,3 @@ ai_models/saved_models/soil_model.pkl
 - CORS restricted to configured origins in production
 - `.env` and `serviceAccountKey.json` excluded from git
 
----
-
-## 📄 License
-
-MIT © 2025 AgriCrop Team
