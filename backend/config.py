@@ -74,8 +74,11 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> List[str]:
-        """Parse comma-separated ALLOWED_ORIGINS into a list."""
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        """Parse comma-separated ALLOWED_ORIGINS into a list.
+        NOTE: Do NOT include '*' when allow_credentials=True (FastAPI restriction).
+        """
+        origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip() and o.strip() != "*"]
+        return origins if origins else ["http://localhost:8080"]
 
     # ── Rate Limiting ─────────────────────────────────────────
     RATE_LIMIT_REQUESTS: int = 100
