@@ -6,16 +6,21 @@
  */
 (function () {
   const hostname = window.location.hostname;
-  
+
+  // ── Production: always use the absolute Render backend URL ───────────────
+  // Never allow API_BASE to be empty/relative in production — that causes 503s
+  // when the Vercel proxy rewrite fails or Render is cold-starting.
+  const RENDER_BACKEND = "https://agricrop-backend.onrender.com";
+
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     window.API_BASE = "http://localhost:8000";
-  } else if (hostname.includes("vercel") || hostname.includes("vercel.app")) {
-    window.API_BASE = "";
   } else {
-    window.API_BASE = window.BACKEND_URL || "";
+    // Vercel, custom domain, or any other deployment host:
+    // Use BACKEND_URL injected by meta tag, or hard Render URL as fallback.
+    window.API_BASE = window.BACKEND_URL || RENDER_BACKEND;
   }
-  
-  console.log("🌾 AgriCrop API Base:", window.API_BASE || "(relative)");
+
+  console.log("🌾 AgriCrop API Base:", window.API_BASE);
 })();
 
 const AgriCropAPI = (() => {
